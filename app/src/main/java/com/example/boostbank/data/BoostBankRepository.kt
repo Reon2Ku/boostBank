@@ -99,9 +99,6 @@ class BoostBankRepository(context: Context) {
         return database.withTransaction {
             val item = dao.getItemById(itemId) ?: return@withTransaction false
             val account = dao.getAccount() ?: ScoreAccountEntity(totalScore = 0)
-            if (account.totalScore < item.points) {
-                return@withTransaction false
-            }
             val newTotal = account.totalScore - item.points
             dao.upsertAccount(account.copy(totalScore = newTotal, updatedAt = System.currentTimeMillis()))
             dao.insertLog(
@@ -148,6 +145,14 @@ class BoostBankRepository(context: Context) {
 
     suspend fun setPageBackground(page: MainPage, uri: String?) {
         settingsStore.setPageBackground(page, uri)
+    }
+
+    suspend fun setAvatarUri(uri: String?) {
+        settingsStore.setAvatarUri(uri)
+    }
+
+    suspend fun setConfirmBeforeEarn(enabled: Boolean) {
+        settingsStore.setConfirmBeforeEarn(enabled)
     }
 
     private fun ScoreItemEntity.toModel(): ScoreItem {

@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -47,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +74,7 @@ private val LogTimeFormatter: DateTimeFormatter =
 
 private sealed interface ImagePickerTarget {
     data object ItemEditor : ImagePickerTarget
+    data object Avatar : ImagePickerTarget
     data class PageBackground(val page: MainPage) : ImagePickerTarget
 }
 
@@ -120,6 +124,11 @@ fun BoostBankApp() {
 
         when (target) {
             ImagePickerTarget.ItemEditor -> itemEditorImageUri = uri.toString()
+            ImagePickerTarget.Avatar -> {
+                coroutineScope.launch {
+                    repository.setAvatarUri(uri.toString())
+                }
+            }
             is ImagePickerTarget.PageBackground -> {
                 coroutineScope.launch {
                     repository.setPageBackground(target.page, uri.toString())
@@ -132,12 +141,31 @@ fun BoostBankApp() {
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
             NavigationBar {
+                val lang = settings.language
                 MainPage.entries.forEach { page ->
                     NavigationBarItem(
                         selected = currentPage == page,
                         onClick = { currentPage = page },
-                        icon = { Text(page.shortLabel) },
-                        label = { Text(page.label) }
+                        icon = {
+                            Text(
+                                when (page) {
+                                    MainPage.EARN -> s("赚", "E", lang)
+                                    MainPage.REWARD -> s("奖", "R", lang)
+                                    MainPage.OVERVIEW -> s("览", "O", lang)
+                                    MainPage.ME -> s("我", "M", lang)
+                                }
+                            )
+                        },
+                        label = {
+                            Text(
+                                when (page) {
+                                    MainPage.EARN -> s("赚取积分", "Earn", lang)
+                                    MainPage.REWARD -> s("购买奖励", "Rewards", lang)
+                                    MainPage.OVERVIEW -> s("分数概览", "Overview", lang)
+                                    MainPage.ME -> s("我的", "Me", lang)
+                                }
+                            )
+                        }
                     )
                 }
             }
@@ -172,6 +200,8 @@ fun BoostBankApp() {
                 MainPage.EARN -> EarnPage(
                     items = earnItems,
                     totalScore = totalScore,
+                    confirmBeforeEarn = settings.confirmBeforeEarn,
+                    lang = settings.language,
                     onAddRequest = {
                         itemEditorState = ItemEditorState(ItemCategory.EARN)
                         itemEditorImageUri = null
@@ -203,10 +233,7 @@ fun BoostBankApp() {
                     onDeleteRequest = { pendingDeleteItem = it },
                     onRedeemItem = { item ->
                         coroutineScope.launch {
-                            val success = repository.redeemReward(item.id)
-                            if (!success) {
-                                infoMessage = "当前积分不足，无法兑换 ${item.name}。"
-                            }
+                            repository.redeemReward(item.id)
                         }
                     }
                 )
@@ -223,9 +250,15 @@ fun BoostBankApp() {
 
                 MainPage.ME -> MePage(
                     settings = settings,
+                    lang = settings.language,
                     onLanguageSelected = { language ->
                         coroutineScope.launch {
                             repository.setLanguage(language)
+                        }
+                    },
+                    onConfirmBeforeEarnChanged = { enabled ->
+                        coroutineScope.launch {
+                            repository.setConfirmBeforeEarn(enabled)
                         }
                     },
                     onConfirmBeforeRewardChanged = { enabled ->
@@ -237,6 +270,10 @@ fun BoostBankApp() {
                         coroutineScope.launch {
                             repository.setUseWarmBackground(enabled)
                         }
+                    },
+                    onPickAvatar = {
+                        imagePickerTarget = ImagePickerTarget.Avatar
+                        openDocumentLauncher.launch(arrayOf("image/*"))
                     },
                     onPickPageBackground = { page ->
                         imagePickerTarget = ImagePickerTarget.PageBackground(page)
@@ -319,15 +356,24 @@ fun BoostBankApp() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// String helper — returns the zh string if lang is Chinese, else en string
+// ---------------------------------------------------------------------------
+private fun s(zh: String, en: String, lang: String) = if (lang == "English") en else zh
+
 @Composable
 private fun EarnPage(
     items: List<ScoreItem>,
     totalScore: Int,
+    confirmBeforeEarn: Boolean,
+    lang: String,
     onAddRequest: () -> Unit,
     onEditRequest: (ScoreItem) -> Unit,
     onDeleteRequest: (ScoreItem) -> Unit,
     onCompleteItem: (ScoreItem) -> Unit
 ) {
+    var pendingEarnItem by remember { mutableStateOf<ScoreItem?>(null) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -336,9 +382,10 @@ private fun EarnPage(
     ) {
         item {
             PageHeader(
-                title = "赚取积分",
-                subtitle = "点击卡片完成事务并加分，当前总积分：$totalScore",
-                actionText = "新增事务",
+                title = s("赚取积分", "Earn Points", lang),
+                subtitle = s("点击卡片完成事务并加分，当前总积分：$totalScore",
+                    "Tap a task to earn points. Current total: $totalScore", lang),
+                actionText = s("新增事务", "Add Task", lang),
                 onActionClick = onAddRequest
             )
         }
@@ -346,13 +393,47 @@ private fun EarnPage(
         items(items, key = { it.id }) { item ->
             ScoreItemCard(
                 item = item,
-                actionLabel = "完成一次 +${item.points}",
+                actionLabel = s("完成一次 +${item.points}", "Complete +${item.points}", lang),
                 accentColor = Color(0xFFD9F99D),
-                onPrimaryClick = { onCompleteItem(item) },
+                onPrimaryClick = {
+                    if (confirmBeforeEarn) {
+                        pendingEarnItem = item
+                    } else {
+                        onCompleteItem(item)
+                    }
+                },
                 onEditClick = { onEditRequest(item) },
                 onDeleteClick = { onDeleteRequest(item) }
             )
         }
+    }
+
+    if (pendingEarnItem != null) {
+        AlertDialog(
+            onDismissRequest = { pendingEarnItem = null },
+            title = { Text(s("确认完成", "Confirm Task", lang)) },
+            text = {
+                Text(
+                    s("确认完成《${pendingEarnItem!!.name}》，获得 +${pendingEarnItem!!.points} 积分？",
+                        "Complete \"${pendingEarnItem!!.name}\" and earn +${pendingEarnItem!!.points} points?",
+                        lang)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val earn = pendingEarnItem ?: return@TextButton
+                    onCompleteItem(earn)
+                    pendingEarnItem = null
+                }) {
+                    Text(s("确认", "Confirm", lang))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingEarnItem = null }) {
+                    Text(s("取消", "Cancel", lang))
+                }
+            }
+        )
     }
 }
 
@@ -367,7 +448,6 @@ private fun RewardPage(
     onRedeemItem: (ScoreItem) -> Unit
 ) {
     var pendingReward by remember { mutableStateOf<ScoreItem?>(null) }
-    var warningText by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = Modifier
@@ -378,7 +458,7 @@ private fun RewardPage(
         item {
             PageHeader(
                 title = "购买奖励",
-                subtitle = "兑换前会校验积分是否充足，当前总积分：$totalScore",
+                subtitle = "允许透支积分（可为负数），当前总积分：$totalScore",
                 actionText = "新增奖励",
                 onActionClick = onAddRequest
             )
@@ -390,9 +470,7 @@ private fun RewardPage(
                 actionLabel = "兑换奖励 -${item.points}",
                 accentColor = Color(0xFFFECACA),
                 onPrimaryClick = {
-                    if (item.points > totalScore) {
-                        warningText = "当前积分不足，无法兑换 ${item.name}。"
-                    } else if (confirmBeforeReward) {
+                    if (confirmBeforeReward) {
                         pendingReward = item
                     } else {
                         onRedeemItem(item)
@@ -421,19 +499,6 @@ private fun RewardPage(
             dismissButton = {
                 TextButton(onClick = { pendingReward = null }) {
                     Text("取消")
-                }
-            }
-        )
-    }
-
-    if (warningText != null) {
-        AlertDialog(
-            onDismissRequest = { warningText = null },
-            title = { Text("提示") },
-            text = { Text(warningText!!) },
-            confirmButton = {
-                TextButton(onClick = { warningText = null }) {
-                    Text("知道了")
                 }
             }
         )
@@ -527,9 +592,12 @@ private fun OverviewPage(
 @Composable
 private fun MePage(
     settings: AppSettings,
+    lang: String,
     onLanguageSelected: (String) -> Unit,
+    onConfirmBeforeEarnChanged: (Boolean) -> Unit,
     onConfirmBeforeRewardChanged: (Boolean) -> Unit,
     onWarmBackgroundChanged: (Boolean) -> Unit,
+    onPickAvatar: () -> Unit,
     onPickPageBackground: (MainPage) -> Unit,
     onClearPageBackground: (MainPage) -> Unit
 ) {
@@ -541,17 +609,59 @@ private fun MePage(
     ) {
         item {
             PageHeader(
-                title = "我的",
-                subtitle = "设置会保存到本地，重启 App 后仍然生效。"
+                title = s("我的", "Me", lang),
+                subtitle = s("设置会保存到本地，重启 App 后仍然生效。",
+                    "Settings are saved locally and persist after restart.", lang)
             )
+        }
+
+        // Avatar card
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(s("头像", "Avatar", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    if (settings.avatarUri != null) {
+                        AsyncImage(
+                            model = settings.avatarUri,
+                            contentDescription = s("头像", "Avatar", lang),
+                            modifier = Modifier
+                                .size(96.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(96.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "?",
+                                fontSize = 36.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedButton(onClick = onPickAvatar) {
+                        Text(s("选择头像", "Choose Avatar", lang))
+                    }
+                }
+            }
         }
 
         item {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text("通用设置", fontWeight = FontWeight.SemiBold)
+                    Text(s("通用设置", "General", lang), fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("语言")
+                    Text(s("语言", "Language", lang))
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("简体中文", "English").forEach { language ->
@@ -564,13 +674,19 @@ private fun MePage(
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     SettingRow(
-                        title = "兑换前二次确认",
+                        title = s("完成任务前二次确认", "Confirm before earning", lang),
+                        value = settings.confirmBeforeEarn,
+                        onValueChange = onConfirmBeforeEarnChanged
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                    SettingRow(
+                        title = s("兑换前二次确认", "Confirm before redeeming", lang),
                         value = settings.confirmBeforeReward,
                         onValueChange = onConfirmBeforeRewardChanged
                     )
                     HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                     SettingRow(
-                        title = "使用暖色背景遮罩",
+                        title = s("使用暖色背景遮罩", "Warm background tint", lang),
                         value = settings.useWarmBackground,
                         onValueChange = onWarmBackgroundChanged
                     )
@@ -581,12 +697,18 @@ private fun MePage(
         item {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text("主页面背景", fontWeight = FontWeight.SemiBold)
+                    Text(s("主页面背景", "Page Backgrounds", lang), fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(12.dp))
                     MainPage.entries.forEachIndexed { index, page ->
                         PageBackgroundRow(
-                            page = page,
+                            pageLabel = when (page) {
+                                MainPage.EARN -> s("赚取积分", "Earn", lang)
+                                MainPage.REWARD -> s("购买奖励", "Rewards", lang)
+                                MainPage.OVERVIEW -> s("分数概览", "Overview", lang)
+                                MainPage.ME -> s("我的", "Me", lang)
+                            },
                             currentUri = settings.backgroundFor(page),
+                            lang = lang,
                             onPick = { onPickPageBackground(page) },
                             onClear = { onClearPageBackground(page) }
                         )
@@ -713,23 +835,25 @@ private fun LogCard(log: ScoreLog) {
 
 @Composable
 private fun PageBackgroundRow(
-    page: MainPage,
+    pageLabel: String,
     currentUri: String?,
+    lang: String,
     onPick: () -> Unit,
     onClear: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(page.label, fontWeight = FontWeight.Medium)
+        Text(pageLabel, fontWeight = FontWeight.Medium)
         Text(
-            text = if (currentUri == null) "当前未设置背景图" else "当前已选择背景图",
+            text = if (currentUri == null) s("当前未设置背景图", "No background set", lang)
+                   else s("当前已选择背景图", "Background image set", lang),
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onPick) {
-                Text("选择图片")
+                Text(s("选择图片", "Choose", lang))
             }
             OutlinedButton(onClick = onClear, enabled = currentUri != null) {
-                Text("清除")
+                Text(s("清除", "Clear", lang))
             }
         }
     }

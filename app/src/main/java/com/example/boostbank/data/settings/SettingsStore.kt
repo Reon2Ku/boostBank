@@ -29,7 +29,9 @@ class SettingsStore(private val context: Context) {
             AppSettings(
                 language = preferences[LANGUAGE] ?: "简体中文",
                 confirmBeforeReward = preferences[CONFIRM_BEFORE_REWARD] ?: true,
+                confirmBeforeEarn = preferences[CONFIRM_BEFORE_EARN] ?: true,
                 useWarmBackground = preferences[USE_WARM_BACKGROUND] ?: false,
+                avatarUri = preferences[AVATAR_URI],
                 earnBackgroundUri = preferences[EARN_BACKGROUND_URI],
                 rewardBackgroundUri = preferences[REWARD_BACKGROUND_URI],
                 overviewBackgroundUri = preferences[OVERVIEW_BACKGROUND_URI],
@@ -43,6 +45,16 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setConfirmBeforeReward(enabled: Boolean) {
         context.dataStore.edit { it[CONFIRM_BEFORE_REWARD] = enabled }
+    }
+
+    suspend fun setAvatarUri(uri: String?) {
+        context.dataStore.edit { preferences ->
+            if (uri.isNullOrBlank()) preferences.remove(AVATAR_URI) else preferences[AVATAR_URI] = uri
+        }
+    }
+
+    suspend fun setConfirmBeforeEarn(enabled: Boolean) {
+        context.dataStore.edit { it[CONFIRM_BEFORE_EARN] = enabled }
     }
 
     suspend fun setUseWarmBackground(enabled: Boolean) {
@@ -72,7 +84,9 @@ class SettingsStore(private val context: Context) {
     companion object {
         private val LANGUAGE = stringPreferencesKey("language")
         private val CONFIRM_BEFORE_REWARD = booleanPreferencesKey("confirm_before_reward")
+        private val CONFIRM_BEFORE_EARN = booleanPreferencesKey("confirm_before_earn")
         private val USE_WARM_BACKGROUND = booleanPreferencesKey("use_warm_background")
+        private val AVATAR_URI = stringPreferencesKey("avatar_uri")
         private val EARN_BACKGROUND_URI = stringPreferencesKey("earn_background_uri")
         private val REWARD_BACKGROUND_URI = stringPreferencesKey("reward_background_uri")
         private val OVERVIEW_BACKGROUND_URI = stringPreferencesKey("overview_background_uri")

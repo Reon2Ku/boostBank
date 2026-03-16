@@ -39,7 +39,9 @@ data class ScoreLog(
 data class AppSettings(
     val language: String = "简体中文",
     val confirmBeforeReward: Boolean = true,
+    val confirmBeforeEarn: Boolean = true,
     val useWarmBackground: Boolean = false,
+    val avatarUri: String? = null,
     val earnBackgroundUri: String? = null,
     val rewardBackgroundUri: String? = null,
     val overviewBackgroundUri: String? = null,
