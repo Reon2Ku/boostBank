@@ -23,7 +23,10 @@ data class ScoreItem(
     val name: String,
     val points: Int,
     val category: ItemCategory,
-    val imageUri: String?
+    val imageUri: String?,
+    val imageBiasX: Float = 0f,
+    val imageBiasY: Float = 0f,
+    val imageScale: Float = 1f
 )
 
 data class ScoreLog(

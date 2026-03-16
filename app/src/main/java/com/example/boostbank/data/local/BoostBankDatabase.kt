@@ -12,6 +12,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "score_items")
@@ -21,6 +23,9 @@ data class ScoreItemEntity(
     val points: Int,
     val category: String,
     val imageUri: String? = null,
+    val imageBiasX: Float = 0f,
+    val imageBiasY: Float = 0f,
+    val imageScale: Float = 1f,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -81,13 +86,26 @@ interface BoostBankDao {
 
 @Database(
     entities = [ScoreItemEntity::class, ScoreLogEntity::class, ScoreAccountEntity::class],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 abstract class BoostBankDatabase : RoomDatabase() {
     abstract fun boostBankDao(): BoostBankDao
 
     companion object {
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE score_items ADD COLUMN imageBiasX REAL NOT NULL DEFAULT 0.0")
+                db.execSQL("ALTER TABLE score_items ADD COLUMN imageBiasY REAL NOT NULL DEFAULT 0.0")
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE score_items ADD COLUMN imageScale REAL NOT NULL DEFAULT 1.0")
+            }
+        }
+
         @Volatile
         private var INSTANCE: BoostBankDatabase? = null
 
@@ -97,7 +115,7 @@ abstract class BoostBankDatabase : RoomDatabase() {
                     context.applicationContext,
                     BoostBankDatabase::class.java,
                     "boostbank.db"
-                ).build()
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
                 INSTANCE = instance
                 instance
             }

@@ -49,24 +49,46 @@ class BoostBankRepository(context: Context) {
         }
     }
 
-    suspend fun addItem(category: ItemCategory, name: String, points: Int, imageUri: String?) {
+    suspend fun addItem(
+        category: ItemCategory,
+        name: String,
+        points: Int,
+        imageUri: String?,
+        imageBiasX: Float,
+        imageBiasY: Float,
+        imageScale: Float
+    ) {
         dao.insertItem(
             ScoreItemEntity(
                 name = name,
                 points = points,
                 category = category.name,
-                imageUri = imageUri
+                imageUri = imageUri,
+                imageBiasX = imageBiasX,
+                imageBiasY = imageBiasY,
+                imageScale = imageScale
             )
         )
     }
 
-    suspend fun updateItem(id: Long, name: String, points: Int, imageUri: String?) {
+    suspend fun updateItem(
+        id: Long,
+        name: String,
+        points: Int,
+        imageUri: String?,
+        imageBiasX: Float,
+        imageBiasY: Float,
+        imageScale: Float
+    ) {
         val existing = dao.getItemById(id) ?: return
         dao.updateItem(
             existing.copy(
                 name = name,
                 points = points,
                 imageUri = imageUri,
+                imageBiasX = imageBiasX,
+                imageBiasY = imageBiasY,
+                imageScale = imageScale,
                 updatedAt = System.currentTimeMillis()
             )
         )
@@ -165,7 +187,10 @@ class BoostBankRepository(context: Context) {
             name = name,
             points = points,
             category = ItemCategory.valueOf(category),
-            imageUri = imageUri
+            imageUri = imageUri,
+            imageBiasX = imageBiasX,
+            imageBiasY = imageBiasY,
+            imageScale = imageScale
         )
     }
 

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -52,9 +53,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -104,6 +108,9 @@ fun BoostBankApp() {
     var currentPage by rememberSaveable { mutableStateOf(MainPage.EARN) }
     var itemEditorState by remember { mutableStateOf<ItemEditorState?>(null) }
     var itemEditorImageUri by remember { mutableStateOf<String?>(null) }
+    var itemEditorImageBiasX by remember { mutableStateOf(0f) }
+    var itemEditorImageBiasY by remember { mutableStateOf(0f) }
+    var itemEditorImageScale by remember { mutableStateOf(1f) }
     var pendingDeleteItem by remember { mutableStateOf<ScoreItem?>(null) }
     var imagePickerTarget by remember { mutableStateOf<ImagePickerTarget?>(null) }
     var infoMessage by remember { mutableStateOf<String?>(null) }
@@ -129,7 +136,12 @@ fun BoostBankApp() {
         }
 
         when (target) {
-            ImagePickerTarget.ItemEditor -> itemEditorImageUri = uri.toString()
+            ImagePickerTarget.ItemEditor -> {
+                itemEditorImageUri = uri.toString()
+                itemEditorImageBiasX = 0f
+                itemEditorImageBiasY = 0f
+                itemEditorImageScale = 1f
+            }
             ImagePickerTarget.Avatar -> {
                 coroutineScope.launch {
                     repository.setAvatarUri(uri.toString())
@@ -211,10 +223,16 @@ fun BoostBankApp() {
                     onAddRequest = {
                         itemEditorState = ItemEditorState(ItemCategory.EARN)
                         itemEditorImageUri = null
+                        itemEditorImageBiasX = 0f
+                        itemEditorImageBiasY = 0f
+                        itemEditorImageScale = 1f
                     },
                     onEditRequest = { item ->
                         itemEditorState = ItemEditorState(ItemCategory.EARN, item)
                         itemEditorImageUri = item.imageUri
+                        itemEditorImageBiasX = item.imageBiasX
+                        itemEditorImageBiasY = item.imageBiasY
+                        itemEditorImageScale = item.imageScale
                     },
                     onDeleteRequest = { pendingDeleteItem = it },
                     onCompleteItem = { item ->
@@ -231,10 +249,16 @@ fun BoostBankApp() {
                     onAddRequest = {
                         itemEditorState = ItemEditorState(ItemCategory.REWARD)
                         itemEditorImageUri = null
+                        itemEditorImageBiasX = 0f
+                        itemEditorImageBiasY = 0f
+                        itemEditorImageScale = 1f
                     },
                     onEditRequest = { item ->
                         itemEditorState = ItemEditorState(ItemCategory.REWARD, item)
                         itemEditorImageUri = item.imageUri
+                        itemEditorImageBiasX = item.imageBiasX
+                        itemEditorImageBiasY = item.imageBiasY
+                        itemEditorImageScale = item.imageScale
                     },
                     onDeleteRequest = { pendingDeleteItem = it },
                     onRedeemItem = { item ->
@@ -308,22 +332,55 @@ fun BoostBankApp() {
             onDismiss = {
                 itemEditorState = null
                 itemEditorImageUri = null
+                itemEditorImageBiasX = 0f
+                itemEditorImageBiasY = 0f
+                itemEditorImageScale = 1f
             },
             onPickImage = {
                 imagePickerTarget = ImagePickerTarget.ItemEditor
                 openDocumentLauncher.launch(arrayOf("image/*"))
             },
-            onClearImage = { itemEditorImageUri = null },
-            onConfirm = { name, points ->
+            imageBiasX = itemEditorImageBiasX,
+            imageBiasY = itemEditorImageBiasY,
+            imageScale = itemEditorImageScale,
+            onImageBiasXChange = { itemEditorImageBiasX = it },
+            onImageBiasYChange = { itemEditorImageBiasY = it },
+            onImageScaleChange = { itemEditorImageScale = it },
+            onClearImage = {
+                itemEditorImageUri = null
+                itemEditorImageBiasX = 0f
+                itemEditorImageBiasY = 0f
+                itemEditorImageScale = 1f
+            },
+            onConfirm = { name, points, biasX, biasY, imageScale ->
                 coroutineScope.launch {
                     val current = editorState.item
                     if (current == null) {
-                        repository.addItem(editorState.category, name, points, itemEditorImageUri)
+                        repository.addItem(
+                            editorState.category,
+                            name,
+                            points,
+                            itemEditorImageUri,
+                            biasX,
+                            biasY,
+                            imageScale
+                        )
                     } else {
-                        repository.updateItem(current.id, name, points, itemEditorImageUri)
+                        repository.updateItem(
+                            current.id,
+                            name,
+                            points,
+                            itemEditorImageUri,
+                            biasX,
+                            biasY,
+                            imageScale
+                        )
                     }
                     itemEditorState = null
                     itemEditorImageUri = null
+                    itemEditorImageBiasX = 0f
+                    itemEditorImageBiasY = 0f
+                    itemEditorImageScale = 1f
                 }
             }
         )
@@ -630,6 +687,34 @@ private fun MePage(
     onPickPageBackground: (MainPage) -> Unit,
     onClearPageBackground: (MainPage) -> Unit
 ) {
+    var showBackgroundSettings by rememberSaveable { mutableStateOf(false) }
+    var showGeneralSettings by rememberSaveable { mutableStateOf(false) }
+
+    if (showBackgroundSettings) {
+        BackgroundSettingsPage(
+            settings = settings,
+            lang = lang,
+            onBack = { showBackgroundSettings = false },
+            onWarmBackgroundChanged = onWarmBackgroundChanged,
+            onBackgroundMaskOpacityChanged = onBackgroundMaskOpacityChanged,
+            onPickPageBackground = onPickPageBackground,
+            onClearPageBackground = onClearPageBackground
+        )
+        return
+    }
+
+    if (showGeneralSettings) {
+        GeneralSettingsPage(
+            settings = settings,
+            lang = lang,
+            onBack = { showGeneralSettings = false },
+            onLanguageSelected = onLanguageSelected,
+            onConfirmBeforeEarnChanged = onConfirmBeforeEarnChanged,
+            onConfirmBeforeRewardChanged = onConfirmBeforeRewardChanged
+        )
+        return
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -685,12 +770,72 @@ private fun MePage(
             }
         }
 
+        // General Settings entry
         item {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text(s("通用设置", "General", lang), fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(s("语言", "Language", lang))
+                    Text(s("通用设置", "General Settings", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        s("语言、二次确认等偏好设置。", "Language, confirmation preferences, etc.", lang),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(onClick = { showGeneralSettings = true }) {
+                        Text(s("通用设置", "General Settings", lang))
+                    }
+                }
+            }
+        }
+
+        // Background Settings entry
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("背景设置", "Background Settings", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        s("背景图片、遮罩与可见度设置。", "Background images, mask and visibility settings.", lang),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(onClick = { showBackgroundSettings = true }) {
+                        Text(s("背景设置", "Background Settings", lang))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GeneralSettingsPage(
+    settings: AppSettings,
+    lang: String,
+    onBack: () -> Unit,
+    onLanguageSelected: (String) -> Unit,
+    onConfirmBeforeEarnChanged: (Boolean) -> Unit,
+    onConfirmBeforeRewardChanged: (Boolean) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            PageHeader(
+                title = s("通用设置", "General Settings", lang),
+                subtitle = s("语言、确认等偏好设置。", "Language, confirmation preferences.", lang),
+                actionText = s("返回", "Back", lang),
+                onActionClick = onBack
+            )
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("语言", "Language", lang), fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("简体中文", "English").forEach { language ->
@@ -701,7 +846,15 @@ private fun MePage(
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("确认设置", "Confirmation", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(14.dp))
                     SettingRow(
                         title = s("完成任务前二次确认", "Confirm before earning", lang),
                         value = settings.confirmBeforeEarn,
@@ -713,7 +866,42 @@ private fun MePage(
                         value = settings.confirmBeforeReward,
                         onValueChange = onConfirmBeforeRewardChanged
                     )
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackgroundSettingsPage(
+    settings: AppSettings,
+    lang: String,
+    onBack: () -> Unit,
+    onWarmBackgroundChanged: (Boolean) -> Unit,
+    onBackgroundMaskOpacityChanged: (Float) -> Unit,
+    onPickPageBackground: (MainPage) -> Unit,
+    onClearPageBackground: (MainPage) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            PageHeader(
+                title = s("背景设置", "Background Settings", lang),
+                subtitle = s("配置背景可见度和每个页面的背景图。", "Configure visibility and per-page background images.", lang),
+                actionText = s("返回", "Back", lang),
+                onActionClick = onBack
+            )
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("背景可见度", "Background Visibility", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(14.dp))
                     SettingRow(
                         title = s("使用暖色背景遮罩", "Warm background tint", lang),
                         value = settings.useWarmBackground,
@@ -797,21 +985,27 @@ private fun ScoreItemCard(
     onDeleteClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (compact) Modifier.heightIn(min = 220.dp) else Modifier),
         colors = CardDefaults.cardColors(containerColor = accentColor.copy(alpha = 0.45f)),
         shape = RoundedCornerShape(if (compact) 16.dp else 24.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .clipToBounds()
                 .clickable(onClick = onPrimaryClick)
         ) {
             if (item.imageUri != null) {
                 AsyncImage(
                     model = item.imageUri,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .scale(item.imageScale),
+                    contentScale = ContentScale.Crop,
+                    alignment = BiasAlignment(item.imageBiasX, item.imageBiasY)
                 )
                 Box(
                     modifier = Modifier
@@ -928,10 +1122,16 @@ private fun SettingRow(
 private fun ItemEditorDialog(
     state: ItemEditorState,
     imageUri: String?,
+    imageBiasX: Float,
+    imageBiasY: Float,
+    imageScale: Float,
+    onImageBiasXChange: (Float) -> Unit,
+    onImageBiasYChange: (Float) -> Unit,
+    onImageScaleChange: (Float) -> Unit,
     onDismiss: () -> Unit,
     onPickImage: () -> Unit,
     onClearImage: () -> Unit,
-    onConfirm: (String, Int) -> Unit
+    onConfirm: (String, Int, Float, Float, Float) -> Unit
 ) {
     var name by remember(state.item?.id) { mutableStateOf(state.item?.name.orEmpty()) }
     var pointsText by remember(state.item?.id) {
@@ -968,13 +1168,41 @@ private fun ItemEditorDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
                 if (imageUri != null) {
-                    AsyncImage(
-                        model = imageUri,
-                        contentDescription = null,
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(140.dp),
-                        contentScale = ContentScale.Crop
+                            .height(140.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clipToBounds()
+                    ) {
+                        AsyncImage(
+                            model = imageUri,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .scale(imageScale),
+                            contentScale = ContentScale.Crop,
+                            alignment = BiasAlignment(imageBiasX, imageBiasY)
+                        )
+                    }
+                    Text("调整截取区域（拖动滑块）")
+                    Text("缩放")
+                    Slider(
+                        value = imageScale,
+                        onValueChange = onImageScaleChange,
+                        valueRange = 1f..3f
+                    )
+                    Text("水平位置")
+                    Slider(
+                        value = imageBiasX,
+                        onValueChange = onImageBiasXChange,
+                        valueRange = -1f..1f
+                    )
+                    Text("垂直位置")
+                    Slider(
+                        value = imageBiasY,
+                        onValueChange = onImageBiasYChange,
+                        valueRange = -1f..1f
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -989,7 +1217,7 @@ private fun ItemEditorDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name.trim(), points!!) },
+                onClick = { onConfirm(name.trim(), points!!, imageBiasX, imageBiasY, imageScale) },
                 enabled = canConfirm
             ) {
                 Text(if (isEditing) "保存" else "添加")
