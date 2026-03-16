@@ -181,6 +181,10 @@ class BoostBankRepository(context: Context) {
         settingsStore.setConfirmBeforeEarn(enabled)
     }
 
+    suspend fun setNightMode(enabled: Boolean) {
+        settingsStore.setNightMode(enabled)
+    }
+
     private fun ScoreItemEntity.toModel(): ScoreItem {
         return ScoreItem(
             id = id,

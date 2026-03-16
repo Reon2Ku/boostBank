@@ -33,6 +33,7 @@ class SettingsStore(private val context: Context) {
                 confirmBeforeEarn = preferences[CONFIRM_BEFORE_EARN] ?: true,
                 useWarmBackground = preferences[USE_WARM_BACKGROUND] ?: false,
                 backgroundMaskOpacity = preferences[BACKGROUND_MASK_OPACITY] ?: 0.92f,
+                nightMode = preferences[NIGHT_MODE] ?: false,
                 avatarUri = preferences[AVATAR_URI],
                 earnBackgroundUri = preferences[EARN_BACKGROUND_URI],
                 rewardBackgroundUri = preferences[REWARD_BACKGROUND_URI],
@@ -67,6 +68,10 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[BACKGROUND_MASK_OPACITY] = opacity.coerceIn(0.1f, 1f) }
     }
 
+    suspend fun setNightMode(enabled: Boolean) {
+        context.dataStore.edit { it[NIGHT_MODE] = enabled }
+    }
+
     suspend fun setPageBackground(page: MainPage, uri: String?) {
         context.dataStore.edit { preferences ->
             val key = backgroundKeyFor(page)
@@ -93,6 +98,7 @@ class SettingsStore(private val context: Context) {
         private val CONFIRM_BEFORE_EARN = booleanPreferencesKey("confirm_before_earn")
         private val USE_WARM_BACKGROUND = booleanPreferencesKey("use_warm_background")
         private val BACKGROUND_MASK_OPACITY = floatPreferencesKey("background_mask_opacity")
+        private val NIGHT_MODE = booleanPreferencesKey("night_mode")
         private val AVATAR_URI = stringPreferencesKey("avatar_uri")
         private val EARN_BACKGROUND_URI = stringPreferencesKey("earn_background_uri")
         private val REWARD_BACKGROUND_URI = stringPreferencesKey("reward_background_uri")

@@ -73,6 +73,7 @@ import com.example.boostbank.model.LogType
 import com.example.boostbank.model.MainPage
 import com.example.boostbank.model.ScoreItem
 import com.example.boostbank.model.ScoreLog
+import com.example.boostbank.ui.theme.BoostBankTheme
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -155,6 +156,7 @@ fun BoostBankApp() {
         }
     }
 
+    BoostBankTheme(forceNightMode = if (settings.nightMode) true else null) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
@@ -207,7 +209,9 @@ fun BoostBankApp() {
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
-                        if (settings.useWarmBackground) {
+                        if (settings.nightMode) {
+                            Color(0xFF1A1A2E).copy(alpha = (settings.backgroundMaskOpacity * 0.75f).coerceIn(0.1f, 0.85f))
+                        } else if (settings.useWarmBackground) {
                             Color(0xFFFFF7ED).copy(alpha = settings.backgroundMaskOpacity)
                         } else {
                             Color(0xFFF8FAFC).copy(alpha = settings.backgroundMaskOpacity)
@@ -294,6 +298,11 @@ fun BoostBankApp() {
                     onConfirmBeforeRewardChanged = { enabled ->
                         coroutineScope.launch {
                             repository.setConfirmBeforeReward(enabled)
+                        }
+                    },
+                    onNightModeChanged = { enabled ->
+                        coroutineScope.launch {
+                            repository.setNightMode(enabled)
                         }
                     },
                     onWarmBackgroundChanged = { enabled ->
@@ -422,6 +431,7 @@ fun BoostBankApp() {
             }
         )
     }
+    } // BoostBankTheme
 }
 
 // ---------------------------------------------------------------------------
@@ -681,6 +691,7 @@ private fun MePage(
     onLanguageSelected: (String) -> Unit,
     onConfirmBeforeEarnChanged: (Boolean) -> Unit,
     onConfirmBeforeRewardChanged: (Boolean) -> Unit,
+    onNightModeChanged: (Boolean) -> Unit,
     onWarmBackgroundChanged: (Boolean) -> Unit,
     onBackgroundMaskOpacityChanged: (Float) -> Unit,
     onPickAvatar: () -> Unit,
@@ -710,7 +721,8 @@ private fun MePage(
             onBack = { showGeneralSettings = false },
             onLanguageSelected = onLanguageSelected,
             onConfirmBeforeEarnChanged = onConfirmBeforeEarnChanged,
-            onConfirmBeforeRewardChanged = onConfirmBeforeRewardChanged
+            onConfirmBeforeRewardChanged = onConfirmBeforeRewardChanged,
+            onNightModeChanged = onNightModeChanged
         )
         return
     }
@@ -815,7 +827,8 @@ private fun GeneralSettingsPage(
     onBack: () -> Unit,
     onLanguageSelected: (String) -> Unit,
     onConfirmBeforeEarnChanged: (Boolean) -> Unit,
-    onConfirmBeforeRewardChanged: (Boolean) -> Unit
+    onConfirmBeforeRewardChanged: (Boolean) -> Unit,
+    onNightModeChanged: (Boolean) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -865,6 +878,20 @@ private fun GeneralSettingsPage(
                         title = s("兑换前二次确认", "Confirm before redeeming", lang),
                         value = settings.confirmBeforeReward,
                         onValueChange = onConfirmBeforeRewardChanged
+                    )
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("夜间模式", "Night Mode", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(14.dp))
+                    SettingRow(
+                        title = s("启用夜间模式", "Enable night mode", lang),
+                        value = settings.nightMode,
+                        onValueChange = onNightModeChanged
                     )
                 }
             }
