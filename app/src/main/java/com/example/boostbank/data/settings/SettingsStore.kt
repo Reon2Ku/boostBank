@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.boostbank.model.AppSettings
@@ -31,6 +32,7 @@ class SettingsStore(private val context: Context) {
                 confirmBeforeReward = preferences[CONFIRM_BEFORE_REWARD] ?: true,
                 confirmBeforeEarn = preferences[CONFIRM_BEFORE_EARN] ?: true,
                 useWarmBackground = preferences[USE_WARM_BACKGROUND] ?: false,
+                backgroundMaskOpacity = preferences[BACKGROUND_MASK_OPACITY] ?: 0.92f,
                 avatarUri = preferences[AVATAR_URI],
                 earnBackgroundUri = preferences[EARN_BACKGROUND_URI],
                 rewardBackgroundUri = preferences[REWARD_BACKGROUND_URI],
@@ -61,6 +63,10 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[USE_WARM_BACKGROUND] = enabled }
     }
 
+    suspend fun setBackgroundMaskOpacity(opacity: Float) {
+        context.dataStore.edit { it[BACKGROUND_MASK_OPACITY] = opacity.coerceIn(0.1f, 1f) }
+    }
+
     suspend fun setPageBackground(page: MainPage, uri: String?) {
         context.dataStore.edit { preferences ->
             val key = backgroundKeyFor(page)
@@ -86,6 +92,7 @@ class SettingsStore(private val context: Context) {
         private val CONFIRM_BEFORE_REWARD = booleanPreferencesKey("confirm_before_reward")
         private val CONFIRM_BEFORE_EARN = booleanPreferencesKey("confirm_before_earn")
         private val USE_WARM_BACKGROUND = booleanPreferencesKey("use_warm_background")
+        private val BACKGROUND_MASK_OPACITY = floatPreferencesKey("background_mask_opacity")
         private val AVATAR_URI = stringPreferencesKey("avatar_uri")
         private val EARN_BACKGROUND_URI = stringPreferencesKey("earn_background_uri")
         private val REWARD_BACKGROUND_URI = stringPreferencesKey("reward_background_uri")

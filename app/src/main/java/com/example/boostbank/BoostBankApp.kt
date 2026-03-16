@@ -18,6 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -34,6 +38,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -67,6 +72,7 @@ import com.example.boostbank.model.ScoreLog
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 private val LogTimeFormatter: DateTimeFormatter =
@@ -190,9 +196,9 @@ fun BoostBankApp() {
                     .fillMaxSize()
                     .background(
                         if (settings.useWarmBackground) {
-                            Color(0xE8FFF7ED)
+                            Color(0xFFFFF7ED).copy(alpha = settings.backgroundMaskOpacity)
                         } else {
-                            Color(0xECF8FAFC)
+                            Color(0xFFF8FAFC).copy(alpha = settings.backgroundMaskOpacity)
                         }
                     )
             )
@@ -269,6 +275,11 @@ fun BoostBankApp() {
                     onWarmBackgroundChanged = { enabled ->
                         coroutineScope.launch {
                             repository.setUseWarmBackground(enabled)
+                        }
+                    },
+                    onBackgroundMaskOpacityChanged = { opacity ->
+                        coroutineScope.launch {
+                            repository.setBackgroundMaskOpacity(opacity)
                         }
                     },
                     onPickAvatar = {
@@ -361,6 +372,17 @@ fun BoostBankApp() {
 // ---------------------------------------------------------------------------
 private fun s(zh: String, en: String, lang: String) = if (lang == "English") en else zh
 
+private fun sanitizeSignedIntInput(input: String): String {
+    if (input.isEmpty()) return ""
+    val isNegative = input.startsWith("-")
+    val digits = input.filter(Char::isDigit)
+    return when {
+        isNegative && digits.isEmpty() -> "-"
+        isNegative -> "-$digits"
+        else -> digits
+    }
+}
+
 @Composable
 private fun EarnPage(
     items: List<ScoreItem>,
@@ -374,13 +396,15 @@ private fun EarnPage(
 ) {
     var pendingEarnItem by remember { mutableStateOf<ScoreItem?>(null) }
 
-    LazyColumn(
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             PageHeader(
                 title = s("赚取积分", "Earn Points", lang),
                 subtitle = s("点击卡片完成事务并加分，当前总积分：$totalScore",
@@ -390,11 +414,12 @@ private fun EarnPage(
             )
         }
 
-        items(items, key = { it.id }) { item ->
+        gridItems(items, key = { it.id }) { item ->
             ScoreItemCard(
                 item = item,
                 actionLabel = s("完成一次 +${item.points}", "Complete +${item.points}", lang),
                 accentColor = Color(0xFFD9F99D),
+                compact = true,
                 onPrimaryClick = {
                     if (confirmBeforeEarn) {
                         pendingEarnItem = item
@@ -449,13 +474,15 @@ private fun RewardPage(
 ) {
     var pendingReward by remember { mutableStateOf<ScoreItem?>(null) }
 
-    LazyColumn(
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             PageHeader(
                 title = "购买奖励",
                 subtitle = "允许透支积分（可为负数），当前总积分：$totalScore",
@@ -464,11 +491,12 @@ private fun RewardPage(
             )
         }
 
-        items(items, key = { it.id }) { item ->
+        gridItems(items, key = { it.id }) { item ->
             ScoreItemCard(
                 item = item,
                 actionLabel = "兑换奖励 -${item.points}",
                 accentColor = Color(0xFFFECACA),
+                compact = true,
                 onPrimaryClick = {
                     if (confirmBeforeReward) {
                         pendingReward = item
@@ -597,6 +625,7 @@ private fun MePage(
     onConfirmBeforeEarnChanged: (Boolean) -> Unit,
     onConfirmBeforeRewardChanged: (Boolean) -> Unit,
     onWarmBackgroundChanged: (Boolean) -> Unit,
+    onBackgroundMaskOpacityChanged: (Float) -> Unit,
     onPickAvatar: () -> Unit,
     onPickPageBackground: (MainPage) -> Unit,
     onClearPageBackground: (MainPage) -> Unit
@@ -690,6 +719,16 @@ private fun MePage(
                         value = settings.useWarmBackground,
                         onValueChange = onWarmBackgroundChanged
                     )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                    Text(
+                        s("背景遮罩透明度：${(settings.backgroundMaskOpacity * 100).roundToInt()}%",
+                            "Mask opacity: ${(settings.backgroundMaskOpacity * 100).roundToInt()}%", lang)
+                    )
+                    Slider(
+                        value = settings.backgroundMaskOpacity,
+                        onValueChange = onBackgroundMaskOpacityChanged,
+                        valueRange = 0.1f..1f
+                    )
                 }
             }
         }
@@ -752,6 +791,7 @@ private fun ScoreItemCard(
     item: ScoreItem,
     actionLabel: String,
     accentColor: Color,
+    compact: Boolean = false,
     onPrimaryClick: () -> Unit,
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit
@@ -759,7 +799,7 @@ private fun ScoreItemCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = accentColor.copy(alpha = 0.45f)),
-        shape = RoundedCornerShape(24.dp)
+        shape = RoundedCornerShape(if (compact) 16.dp else 24.dp)
     ) {
         Box(
             modifier = Modifier
@@ -779,18 +819,27 @@ private fun ScoreItemCard(
                         .background(Color(0xB3FFFFFF))
                 )
             }
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text(item.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.height(6.dp))
+            Column(modifier = Modifier.padding(if (compact) 12.dp else 18.dp)) {
+                Text(
+                    item.name,
+                    style = if (compact) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(if (compact) 4.dp else 6.dp))
                 Text("积分值：${item.points}")
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(actionLabel, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(if (compact) 6.dp else 10.dp))
+                Text(
+                    actionLabel,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
+                    style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(if (compact) 8.dp else 14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onEditClick) {
+                    TextButton(onClick = onEditClick) {
                         Text("编辑")
                     }
-                    OutlinedButton(onClick = onDeleteClick) {
+                    TextButton(onClick = onDeleteClick) {
                         Text("删除")
                     }
                 }
@@ -971,10 +1020,10 @@ private fun AdjustScoreDialog(
                 Text("当前总积分：$currentScore")
                 OutlinedTextField(
                     value = scoreText,
-                    onValueChange = { scoreText = it.filter(Char::isDigit) },
+                    onValueChange = { scoreText = sanitizeSignedIntInput(it) },
                     label = { Text("新的总积分") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
                 )
             }
         },

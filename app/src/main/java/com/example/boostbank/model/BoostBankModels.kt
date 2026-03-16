@@ -41,6 +41,7 @@ data class AppSettings(
     val confirmBeforeReward: Boolean = true,
     val confirmBeforeEarn: Boolean = true,
     val useWarmBackground: Boolean = false,
+    val backgroundMaskOpacity: Float = 0.92f,
     val avatarUri: String? = null,
     val earnBackgroundUri: String? = null,
     val rewardBackgroundUri: String? = null,

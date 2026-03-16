@@ -143,6 +143,10 @@ class BoostBankRepository(context: Context) {
         settingsStore.setUseWarmBackground(enabled)
     }
 
+    suspend fun setBackgroundMaskOpacity(opacity: Float) {
+        settingsStore.setBackgroundMaskOpacity(opacity)
+    }
+
     suspend fun setPageBackground(page: MainPage, uri: String?) {
         settingsStore.setPageBackground(page, uri)
     }
