@@ -40,11 +40,8 @@ android {
     }
 }
 
-android.applicationVariants.configureEach {
-    outputs.configureEach {
-        (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl)
-            .outputFileName = "boostBank.apk"
-    }
+base {
+    archivesName.set("boostBank")
 }
 
 dependencies {
