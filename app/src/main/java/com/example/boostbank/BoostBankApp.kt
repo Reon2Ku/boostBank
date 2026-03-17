@@ -1265,7 +1265,7 @@ private fun ScoreItemCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(if (compact) 220.dp else 260.dp),
+            .aspectRatio(3f / 4f),
         colors = CardDefaults.cardColors(containerColor = accentColor.copy(alpha = 0.45f)),
         shape = RoundedCornerShape(if (compact) 16.dp else 24.dp)
     ) {
@@ -1290,7 +1290,7 @@ private fun ScoreItemCard(
                             translationX = -item.imageBiasX * halfW * (imgScale - 1f)
                             translationY = -item.imageBiasY * halfH * (imgScale - 1f)
                         },
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Fit
                 )
                 Box(
                     modifier = Modifier
@@ -1427,6 +1427,26 @@ private fun ItemEditorDialog(
     val canConfirm = name.isNotBlank() && points != null && points > 0
     val isEditing = state.item != null
 
+    // Local gesture state — avoids stale closure inside pointerInput
+    var zoom by remember { mutableStateOf(imageScale.coerceAtLeast(1f)) }
+    var offsetX by remember { mutableStateOf(0f) }
+    var offsetY by remember { mutableStateOf(0f) }
+    var containerW by remember { mutableStateOf(0) }
+    var containerH by remember { mutableStateOf(0) }
+    var gestureInitialized by remember { mutableStateOf(false) }
+
+    // Restore previous crop position once container is measured
+    LaunchedEffect(containerW, containerH) {
+        if (containerW > 0 && containerH > 0 && !gestureInitialized) {
+            gestureInitialized = true
+            zoom = imageScale.coerceAtLeast(1f)
+            val halfW = containerW / 2f
+            val halfH = containerH / 2f
+            offsetX = -imageBiasX * halfW * (zoom - 1f)
+            offsetY = -imageBiasY * halfH * (zoom - 1f)
+        }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(16.dp),
@@ -1470,45 +1490,39 @@ private fun ItemEditorDialog(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(180.dp)
+                            .aspectRatio(3f / 4f)
                             .clip(RoundedCornerShape(12.dp))
                             .clipToBounds()
                             .background(Color.Black)
+                            .onSizeChanged {
+                                containerW = it.width
+                                containerH = it.height
+                            }
                             .pointerInput(Unit) {
                                 detectTransformGestures { _, pan, gestureZoom, _ ->
-                                    val newScale = (imageScale * gestureZoom).coerceIn(1f, 5f)
-                                    onImageScaleChange(newScale)
+                                    zoom = (zoom * gestureZoom).coerceIn(1f, 5f)
                                     val halfW = size.width / 2f
                                     val halfH = size.height / 2f
-                                    val maxOffX = halfW * (newScale - 1f)
-                                    val maxOffY = halfH * (newScale - 1f)
-                                    val curOffX = -imageBiasX * maxOffX
-                                    val curOffY = -imageBiasY * maxOffY
-                                    val newOffX = (curOffX + pan.x).coerceIn(-maxOffX, maxOffX)
-                                    val newOffY = (curOffY + pan.y).coerceIn(-maxOffY, maxOffY)
-                                    val newBiasX = if (maxOffX > 0f) (-newOffX / maxOffX).coerceIn(-1f, 1f) else 0f
-                                    val newBiasY = if (maxOffY > 0f) (-newOffY / maxOffY).coerceIn(-1f, 1f) else 0f
-                                    onImageBiasXChange(newBiasX)
-                                    onImageBiasYChange(newBiasY)
+                                    val maxOffX = halfW * (zoom - 1f)
+                                    val maxOffY = halfH * (zoom - 1f)
+                                    offsetX = (offsetX + pan.x).coerceIn(-maxOffX, maxOffX)
+                                    offsetY = (offsetY + pan.y).coerceIn(-maxOffY, maxOffY)
                                 }
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        val previewScale = imageScale.coerceAtLeast(1f)
                         AsyncImage(
                             model = imageUri,
                             contentDescription = null,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .graphicsLayer {
-                                    scaleX = previewScale
-                                    scaleY = previewScale
-                                    val halfW = size.width / 2f
-                                    val halfH = size.height / 2f
-                                    translationX = -imageBiasX * halfW * (previewScale - 1f)
-                                    translationY = -imageBiasY * halfH * (previewScale - 1f)
+                                    scaleX = zoom
+                                    scaleY = zoom
+                                    translationX = offsetX
+                                    translationY = offsetY
                                 },
-                            contentScale = ContentScale.Crop
+                            contentScale = ContentScale.Fit
                         )
                     }
                     Spacer(Modifier.height(8.dp))
@@ -1532,7 +1546,16 @@ private fun ItemEditorDialog(
                     }
                     Spacer(Modifier.width(8.dp))
                     TextButton(
-                        onClick = { onConfirm(name.trim(), points!!, imageBiasX, imageBiasY, imageScale) },
+                        onClick = {
+                            // Convert local offset/zoom to bias values
+                            val halfW = containerW / 2f
+                            val halfH = containerH / 2f
+                            val maxOffX = (halfW * (zoom - 1f)).coerceAtLeast(0.001f)
+                            val maxOffY = (halfH * (zoom - 1f)).coerceAtLeast(0.001f)
+                            val biasX = (-offsetX / maxOffX).coerceIn(-1f, 1f)
+                            val biasY = (-offsetY / maxOffY).coerceIn(-1f, 1f)
+                            onConfirm(name.trim(), points!!, biasX, biasY, zoom)
+                        },
                         enabled = canConfirm
                     ) {
                         Text(s(if (isEditing) "保存" else "添加", if (isEditing) "Save" else "Add", lang))
