@@ -26,6 +26,8 @@ data class ScoreItemEntity(
     val imageBiasX: Float = 0f,
     val imageBiasY: Float = 0f,
     val imageScale: Float = 1f,
+    val isMilestone: Boolean = false,
+    val completedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -48,10 +50,21 @@ data class ScoreAccountEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "stat_trackers")
+data class StatTrackerEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val trackedSources: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 @Dao
 interface BoostBankDao {
-    @Query("SELECT * FROM score_items WHERE category = :category ORDER BY updatedAt DESC, id DESC")
+    @Query("SELECT * FROM score_items WHERE category = :category AND isMilestone = 0 ORDER BY updatedAt DESC, id DESC")
     fun observeItems(category: String): Flow<List<ScoreItemEntity>>
+
+    @Query("SELECT * FROM score_items WHERE isMilestone = 1 ORDER BY (CASE WHEN completedAt IS NULL THEN 0 ELSE 1 END), updatedAt DESC, id DESC")
+    fun observeMilestones(): Flow<List<ScoreItemEntity>>
 
     @Query("SELECT COUNT(*) FROM score_items WHERE category = :category")
     suspend fun countItems(category: String): Int
@@ -82,11 +95,20 @@ interface BoostBankDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAccount(account: ScoreAccountEntity)
+
+    @Query("SELECT * FROM stat_trackers ORDER BY createdAt DESC")
+    fun observeTrackers(): Flow<List<StatTrackerEntity>>
+
+    @Insert
+    suspend fun insertTracker(tracker: StatTrackerEntity): Long
+
+    @Query("DELETE FROM stat_trackers WHERE id = :id")
+    suspend fun deleteTracker(id: Long)
 }
 
 @Database(
-    entities = [ScoreItemEntity::class, ScoreLogEntity::class, ScoreAccountEntity::class],
-    version = 3,
+    entities = [ScoreItemEntity::class, ScoreLogEntity::class, ScoreAccountEntity::class, StatTrackerEntity::class],
+    version = 5,
     exportSchema = false
 )
 abstract class BoostBankDatabase : RoomDatabase() {
@@ -106,6 +128,19 @@ abstract class BoostBankDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS stat_trackers (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, trackedSources TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+            }
+        }
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE score_items ADD COLUMN isMilestone INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE score_items ADD COLUMN completedAt INTEGER")
+            }
+        }
+
         @Volatile
         private var INSTANCE: BoostBankDatabase? = null
 
@@ -115,7 +150,7 @@ abstract class BoostBankDatabase : RoomDatabase() {
                     context.applicationContext,
                     BoostBankDatabase::class.java,
                     "boostbank.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
                 INSTANCE = instance
                 instance
             }

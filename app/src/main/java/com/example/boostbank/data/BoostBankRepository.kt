@@ -6,6 +6,7 @@ import com.example.boostbank.data.local.BoostBankDatabase
 import com.example.boostbank.data.local.ScoreAccountEntity
 import com.example.boostbank.data.local.ScoreItemEntity
 import com.example.boostbank.data.local.ScoreLogEntity
+import com.example.boostbank.data.local.StatTrackerEntity
 import com.example.boostbank.data.settings.SettingsStore
 import com.example.boostbank.model.AppSettings
 import com.example.boostbank.model.ItemCategory
@@ -13,6 +14,7 @@ import com.example.boostbank.model.LogType
 import com.example.boostbank.model.MainPage
 import com.example.boostbank.model.ScoreItem
 import com.example.boostbank.model.ScoreLog
+import com.example.boostbank.model.StatTracker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -27,11 +29,17 @@ class BoostBankRepository(context: Context) {
     val rewardItems: Flow<List<ScoreItem>> = dao.observeItems(ItemCategory.REWARD.name)
         .map { list -> list.map { it.toModel() } }
 
+    val milestones: Flow<List<ScoreItem>> = dao.observeMilestones()
+        .map { list -> list.map { it.toModel() } }
+
     val logs: Flow<List<ScoreLog>> = dao.observeLogs()
         .map { list -> list.map { it.toModel() } }
 
     val totalScore: Flow<Int> = dao.observeTotalScore()
         .map { it ?: 0 }
+
+    val trackers: Flow<List<StatTracker>> = dao.observeTrackers()
+        .map { list -> list.map { StatTracker(it.id, it.name, it.trackedSources.split("|").filter { s -> s.isNotBlank() }, it.createdAt) } }
 
     val settings: Flow<AppSettings> = settingsStore.settings
 
@@ -205,7 +213,9 @@ class BoostBankRepository(context: Context) {
             imageUri = imageUri,
             imageBiasX = imageBiasX,
             imageBiasY = imageBiasY,
-            imageScale = imageScale
+            imageScale = imageScale,
+            isMilestone = isMilestone,
+            completedAt = completedAt
         )
     }
 
@@ -219,5 +229,55 @@ class BoostBankRepository(context: Context) {
             afterScore = afterScore,
             createdAt = createdAt
         )
+    }
+
+    suspend fun addTracker(name: String, sources: List<String>) {
+        dao.insertTracker(StatTrackerEntity(name = name, trackedSources = sources.joinToString("|")))
+    }
+
+    suspend fun addMilestone(
+        name: String,
+        points: Int,
+        imageUri: String?,
+        imageBiasX: Float,
+        imageBiasY: Float,
+        imageScale: Float
+    ) {
+        dao.insertItem(
+            ScoreItemEntity(
+                name = name,
+                points = points,
+                category = ItemCategory.EARN.name,
+                imageUri = imageUri,
+                imageBiasX = imageBiasX,
+                imageBiasY = imageBiasY,
+                imageScale = imageScale,
+                isMilestone = true
+            )
+        )
+    }
+
+    suspend fun completeMilestone(itemId: Long) {
+        database.withTransaction {
+            val item = dao.getItemById(itemId) ?: return@withTransaction
+            if (!item.isMilestone || item.completedAt != null) return@withTransaction
+            val account = dao.getAccount() ?: ScoreAccountEntity(totalScore = 0)
+            val newTotal = account.totalScore + item.points
+            dao.upsertAccount(account.copy(totalScore = newTotal, updatedAt = System.currentTimeMillis()))
+            dao.updateItem(item.copy(completedAt = System.currentTimeMillis(), updatedAt = System.currentTimeMillis()))
+            dao.insertLog(
+                ScoreLogEntity(
+                    source = item.name,
+                    delta = item.points,
+                    note = "\u5B8C\u6210\u91CC\u7A0B\u7891",
+                    type = LogType.EARN.name,
+                    afterScore = newTotal
+                )
+            )
+        }
+    }
+
+    suspend fun deleteTracker(id: Long) {
+        dao.deleteTracker(id)
     }
 }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -35,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -89,6 +92,7 @@ import com.example.boostbank.model.LogType
 import com.example.boostbank.model.MainPage
 import com.example.boostbank.model.ScoreItem
 import com.example.boostbank.model.ScoreLog
+import com.example.boostbank.model.StatTracker
 import com.example.boostbank.ui.theme.BoostBankTheme
 import java.time.Instant
 import java.time.ZoneId
@@ -122,6 +126,8 @@ fun BoostBankApp() {
     val rewardItems by repository.rewardItems.collectAsState(initial = emptyList())
     val scoreLogs by repository.logs.collectAsState(initial = emptyList())
     val totalScore by repository.totalScore.collectAsState(initial = 0)
+    val milestones by repository.milestones.collectAsState(initial = emptyList())
+    val trackers by repository.trackers.collectAsState(initial = emptyList())
     val settings by repository.settings.collectAsState(initial = AppSettings())
 
     var currentPage by rememberSaveable { mutableStateOf(MainPage.EARN) }
@@ -236,33 +242,57 @@ fun BoostBankApp() {
                     )
             )
             when (currentPage) {
-                MainPage.EARN -> EarnPage(
-                    items = earnItems,
+                MainPage.EARN -> EarnTabContainer(
+                    earnItems = earnItems,
+                    milestones = milestones,
                     totalScore = totalScore,
                     confirmBeforeEarn = settings.confirmBeforeEarn,
                     cardImageOpacity = settings.cardImageOpacity,
                     nightMode = settings.nightMode,
                     lang = settings.language,
-                    onAddRequest = {
+                    onAddTask = {
                         itemEditorState = ItemEditorState(ItemCategory.EARN)
                         itemEditorImageUri = null
                         itemEditorImageBiasX = 0f
                         itemEditorImageBiasY = 0f
                         itemEditorImageScale = 1f
                     },
-                    onEditRequest = { item ->
+                    onEditTask = { item ->
                         itemEditorState = ItemEditorState(ItemCategory.EARN, item)
                         itemEditorImageUri = item.imageUri
                         itemEditorImageBiasX = item.imageBiasX
                         itemEditorImageBiasY = item.imageBiasY
                         itemEditorImageScale = item.imageScale
                     },
-                    onDeleteRequest = { pendingDeleteItem = it },
-                    onCompleteItem = { item ->
+                    onDeleteTask = { pendingDeleteItem = it },
+                    onCompleteTask = { item ->
                         coroutineScope.launch {
                             repository.completeEarn(item.id)
                         }
-                    }
+                    },
+                    onAddMilestone = { name, points, uri, bx, by, scale ->
+                        coroutineScope.launch {
+                            repository.addMilestone(name, points, uri, bx, by, scale)
+                        }
+                    },
+                    onEditMilestone = { item ->
+                        itemEditorState = ItemEditorState(ItemCategory.EARN, item)
+                        itemEditorImageUri = item.imageUri
+                        itemEditorImageBiasX = item.imageBiasX
+                        itemEditorImageBiasY = item.imageBiasY
+                        itemEditorImageScale = item.imageScale
+                    },
+                    onDeleteMilestone = { pendingDeleteItem = it },
+                    onCompleteMilestone = { item ->
+                        coroutineScope.launch {
+                            repository.completeMilestone(item.id)
+                        }
+                    },
+                    onPickImage = {
+                        imagePickerTarget = ImagePickerTarget.ItemEditor
+                        openDocumentLauncher.launch(arrayOf("image/*"))
+                    },
+                    editorImageUri = itemEditorImageUri
                 )
 
                 MainPage.REWARD -> RewardPage(
@@ -297,10 +327,23 @@ fun BoostBankApp() {
                 MainPage.OVERVIEW -> OverviewPage(
                     totalScore = totalScore,
                     logs = scoreLogs,
+                    earnItems = earnItems,
+                    rewardItems = rewardItems,
+                    trackers = trackers,
                     lang = settings.language,
                     onAdjustScore = { newScore, reason ->
                         coroutineScope.launch {
                             repository.adjustTotalScore(newScore, reason)
+                        }
+                    },
+                    onAddTracker = { name, sources ->
+                        coroutineScope.launch {
+                            repository.addTracker(name, sources)
+                        }
+                    },
+                    onDeleteTracker = { id ->
+                        coroutineScope.launch {
+                            repository.deleteTracker(id)
                         }
                     }
                 )
@@ -650,6 +693,332 @@ private fun sanitizeSignedIntInput(input: String): String {
 }
 
 @Composable
+private fun EarnTabContainer(
+    earnItems: List<ScoreItem>,
+    milestones: List<ScoreItem>,
+    totalScore: Int,
+    confirmBeforeEarn: Boolean,
+    cardImageOpacity: Float,
+    nightMode: Boolean,
+    lang: String,
+    onAddTask: () -> Unit,
+    onEditTask: (ScoreItem) -> Unit,
+    onDeleteTask: (ScoreItem) -> Unit,
+    onCompleteTask: (ScoreItem) -> Unit,
+    onAddMilestone: (String, Int, String?, Float, Float, Float) -> Unit,
+    onEditMilestone: (ScoreItem) -> Unit,
+    onDeleteMilestone: (ScoreItem) -> Unit,
+    onCompleteMilestone: (ScoreItem) -> Unit,
+    onPickImage: () -> Unit,
+    editorImageUri: String?
+) {
+    var earnTab by rememberSaveable { mutableStateOf(0) } // 0=daily, 1=milestone
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = earnTab == 0,
+                onClick = { earnTab = 0 },
+                label = { Text(s("日常事务", "Daily Tasks", lang)) }
+            )
+            FilterChip(
+                selected = earnTab == 1,
+                onClick = { earnTab = 1 },
+                label = { Text(s("里程碑", "Milestones", lang)) }
+            )
+        }
+        when (earnTab) {
+            0 -> EarnPage(
+                items = earnItems,
+                totalScore = totalScore,
+                confirmBeforeEarn = confirmBeforeEarn,
+                cardImageOpacity = cardImageOpacity,
+                nightMode = nightMode,
+                lang = lang,
+                onAddRequest = onAddTask,
+                onEditRequest = onEditTask,
+                onDeleteRequest = onDeleteTask,
+                onCompleteItem = onCompleteTask
+            )
+            1 -> MilestonePage(
+                milestones = milestones,
+                totalScore = totalScore,
+                cardImageOpacity = cardImageOpacity,
+                nightMode = nightMode,
+                lang = lang,
+                onEditRequest = onEditMilestone,
+                onDeleteRequest = onDeleteMilestone,
+                onCompleteMilestone = onCompleteMilestone,
+                onAddMilestone = onAddMilestone,
+                onPickImage = onPickImage,
+                editorImageUri = editorImageUri
+            )
+        }
+    }
+}
+
+@Composable
+private fun MilestonePage(
+    milestones: List<ScoreItem>,
+    totalScore: Int,
+    cardImageOpacity: Float,
+    nightMode: Boolean,
+    lang: String,
+    onEditRequest: (ScoreItem) -> Unit,
+    onDeleteRequest: (ScoreItem) -> Unit,
+    onCompleteMilestone: (ScoreItem) -> Unit,
+    onAddMilestone: (String, Int, String?, Float, Float, Float) -> Unit,
+    onPickImage: () -> Unit,
+    editorImageUri: String?
+) {
+    var showAddDialog by remember { mutableStateOf(false) }
+    var pendingComplete by remember { mutableStateOf<ScoreItem?>(null) }
+
+    val incomplete = milestones.filter { it.completedAt == null }
+    val completed = milestones.filter { it.completedAt != null }
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            PageHeader(
+                title = s("里程碑", "Milestones", lang),
+                subtitle = s("记录重大目标，完成后获得积分奖励。当前总积分：$totalScore",
+                    "Track major goals. Earn points upon completion. Total: $totalScore", lang),
+                actionText = s("新增里程碑", "Add Milestone", lang),
+                onActionClick = { showAddDialog = true }
+            )
+        }
+
+        if (incomplete.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    s("进行中", "In Progress", lang),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        gridItems(incomplete, key = { it.id }) { item ->
+            ScoreItemCard(
+                item = item,
+                actionLabel = s("完成 +${item.points}", "Complete +${item.points}", lang),
+                accentColor = Color(0xFFFDE68A),
+                cardImageOpacity = cardImageOpacity,
+                nightMode = nightMode,
+                lang = lang,
+                compact = true,
+                onPrimaryClick = { pendingComplete = item },
+                onEditClick = { onEditRequest(item) },
+                onDeleteClick = { onDeleteRequest(item) }
+            )
+        }
+
+        if (completed.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    s("已完成", "Completed", lang),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF15803D)
+                )
+            }
+        }
+
+        gridItems(completed, key = { it.id }) { item ->
+            ScoreItemCard(
+                item = item,
+                actionLabel = s("✓ 已完成 +${item.points}", "✓ Done +${item.points}", lang),
+                accentColor = Color(0xFFBBF7D0),
+                cardImageOpacity = cardImageOpacity,
+                nightMode = nightMode,
+                lang = lang,
+                compact = true,
+                onPrimaryClick = {},
+                onEditClick = {},
+                onDeleteClick = { onDeleteRequest(item) }
+            )
+        }
+    }
+
+    if (pendingComplete != null) {
+        AlertDialog(
+            onDismissRequest = { pendingComplete = null },
+            title = { Text(s("完成里程碑", "Complete Milestone", lang)) },
+            text = {
+                Text(s("确认完成「${pendingComplete!!.name}」？完成后将获得 +${pendingComplete!!.points} 积分，此操作不可撤销。",
+                    "Complete \"${pendingComplete!!.name}\"? You will earn +${pendingComplete!!.points} points. This cannot be undone.",
+                    lang))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val m = pendingComplete ?: return@TextButton
+                    onCompleteMilestone(m)
+                    pendingComplete = null
+                }) {
+                    Text(s("确认完成", "Confirm", lang))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingComplete = null }) {
+                    Text(s("取消", "Cancel", lang))
+                }
+            }
+        )
+    }
+
+    if (showAddDialog) {
+        MilestoneEditorDialog(
+            lang = lang,
+            onDismiss = { showAddDialog = false },
+            onPickImage = onPickImage,
+            imageUri = editorImageUri,
+            onConfirm = { name, points, biasX, biasY, scale ->
+                onAddMilestone(name, points, editorImageUri, biasX, biasY, scale)
+                showAddDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun MilestoneEditorDialog(
+    lang: String,
+    onDismiss: () -> Unit,
+    onPickImage: () -> Unit,
+    imageUri: String?,
+    onConfirm: (String, Int, Float, Float, Float) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var pointsText by remember { mutableStateOf("") }
+    val points = pointsText.toIntOrNull()
+    val canConfirm = name.isNotBlank() && points != null && points > 0
+
+    var zoom by remember { mutableStateOf(1f) }
+    var offsetX by remember { mutableStateOf(0f) }
+    var offsetY by remember { mutableStateOf(0f) }
+    var containerW by remember { mutableStateOf(0) }
+    var containerH by remember { mutableStateOf(0) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(s("新增里程碑", "Add Milestone", lang), style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(s("名称", "Name", lang)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = pointsText,
+                    onValueChange = { pointsText = it.filter(Char::isDigit) },
+                    label = { Text(s("积分", "Points", lang)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                if (imageUri != null) {
+                    Text(
+                        s("拖动和缩放图片以调整位置", "Drag & pinch to adjust position", lang),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(3f / 4f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clipToBounds()
+                            .background(Color.Black)
+                            .onSizeChanged {
+                                containerW = it.width
+                                containerH = it.height
+                            }
+                            .pointerInput(Unit) {
+                                detectTransformGestures { _, pan, gestureZoom, _ ->
+                                    zoom = (zoom * gestureZoom).coerceIn(1f, 5f)
+                                    val halfW = size.width / 2f
+                                    val halfH = size.height / 2f
+                                    val maxOffX = halfW * (zoom - 1f)
+                                    val maxOffY = halfH * (zoom - 1f)
+                                    offsetX = (offsetX + pan.x).coerceIn(-maxOffX, maxOffX)
+                                    offsetY = (offsetY + pan.y).coerceIn(-maxOffY, maxOffY)
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AsyncImage(
+                            model = imageUri,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    scaleX = zoom
+                                    scaleY = zoom
+                                    translationX = offsetX
+                                    translationY = offsetY
+                                },
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                OutlinedButton(onClick = onPickImage) {
+                    Text(s(if (imageUri == null) "选择背景图片" else "更换背景图片",
+                        if (imageUri == null) "Choose Image" else "Change Image", lang))
+                }
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(s("取消", "Cancel", lang))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        onClick = {
+                            val halfW = containerW / 2f
+                            val halfH = containerH / 2f
+                            val maxOffX = (halfW * (zoom - 1f)).coerceAtLeast(0.001f)
+                            val maxOffY = (halfH * (zoom - 1f)).coerceAtLeast(0.001f)
+                            val biasX = (-offsetX / maxOffX).coerceIn(-1f, 1f)
+                            val biasY = (-offsetY / maxOffY).coerceIn(-1f, 1f)
+                            onConfirm(name.trim(), points!!, biasX, biasY, zoom)
+                        },
+                        enabled = canConfirm
+                    ) {
+                        Text(s("添加", "Add", lang))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun EarnPage(
     items: List<ScoreItem>,
     totalScore: Int,
@@ -812,22 +1181,37 @@ private fun RewardPage(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun OverviewPage(
     totalScore: Int,
     logs: List<ScoreLog>,
+    earnItems: List<ScoreItem>,
+    rewardItems: List<ScoreItem>,
+    trackers: List<StatTracker>,
     lang: String,
-    onAdjustScore: (Int, String) -> Unit
+    onAdjustScore: (Int, String) -> Unit,
+    onAddTracker: (String, List<String>) -> Unit,
+    onDeleteTracker: (Long) -> Unit
 ) {
     var showAdjustDialog by remember { mutableStateOf(false) }
+    var showAddTrackerDialog by remember { mutableStateOf(false) }
     var selectedType by rememberSaveable { mutableStateOf("ALL") }
+    var selectedTrackerId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var pendingDeleteTracker by remember { mutableStateOf<StatTracker?>(null) }
 
-    val filteredLogs = logs.filter {
-        when (selectedType) {
-            "EARN" -> it.type == LogType.EARN
-            "SPEND" -> it.type == LogType.SPEND
-            "ADJUST" -> it.type == LogType.ADJUST
-            else -> true
+    val activeTracker = trackers.find { it.id == selectedTrackerId }
+
+    val filteredLogs = if (activeTracker != null) {
+        logs.filter { it.source in activeTracker.trackedSources }
+    } else {
+        logs.filter {
+            when (selectedType) {
+                "EARN" -> it.type == LogType.EARN
+                "SPEND" -> it.type == LogType.SPEND
+                "ADJUST" -> it.type == LogType.ADJUST
+                else -> true
+            }
         }
     }
 
@@ -862,7 +1246,10 @@ private fun OverviewPage(
         }
 
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 listOf(
                     "ALL" to s("全部", "All", lang),
                     "EARN" to s("获取", "Earn", lang),
@@ -870,17 +1257,104 @@ private fun OverviewPage(
                     "ADJUST" to s("校准", "Adjust", lang)
                 ).forEach { (key, label) ->
                     FilterChip(
-                        selected = selectedType == key,
-                        onClick = { selectedType = key },
+                        selected = selectedTrackerId == null && selectedType == key,
+                        onClick = { selectedType = key; selectedTrackerId = null },
                         label = { Text(label) }
                     )
+                }
+                trackers.forEach { tracker ->
+                    FilterChip(
+                        selected = selectedTrackerId == tracker.id,
+                        onClick = {
+                            if (selectedTrackerId == tracker.id) {
+                                selectedTrackerId = null
+                                selectedType = "ALL"
+                            } else {
+                                selectedTrackerId = tracker.id
+                                selectedType = ""
+                            }
+                        },
+                        label = { Text(tracker.name) }
+                    )
+                }
+                FilterChip(
+                    selected = false,
+                    onClick = { showAddTrackerDialog = true },
+                    label = { Text("+", fontWeight = FontWeight.Bold) }
+                )
+            }
+        }
+
+        // Stats card when a tracker is selected
+        if (activeTracker != null) {
+            item {
+                val matchingLogs = logs.filter { it.source in activeTracker.trackedSources }
+                val count = matchingLogs.size
+                val lastTime = matchingLogs.firstOrNull()?.createdAt
+                val avgInterval = if (count >= 2) {
+                    val timestamps = matchingLogs.map { it.createdAt }.sorted()
+                    val totalSpan = timestamps.last() - timestamps.first()
+                    totalSpan / (count - 1)
+                } else null
+
+                ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                activeTracker.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            TextButton(onClick = { pendingDeleteTracker = activeTracker }) {
+                                Text(s("删除", "Delete", lang), color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(s("统计来源：", "Sources: ", lang) + activeTracker.trackedSources.joinToString("、"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                            Column {
+                                Text(count.toString(), fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                                Text(s("总次数", "Total", lang), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (lastTime != null) {
+                                Column {
+                                    Text(
+                                        LogTimeFormatter.format(Instant.ofEpochMilli(lastTime)),
+                                        fontSize = 16.sp, fontWeight = FontWeight.Medium
+                                    )
+                                    Text(s("最近一次", "Last Time", lang), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            if (avgInterval != null) {
+                                val hours = avgInterval / 3_600_000.0
+                                val freqText = if (hours < 24) {
+                                    s("%.1f 小时".format(hours), "%.1f hrs".format(hours), lang)
+                                } else {
+                                    val days = hours / 24.0
+                                    s("%.1f 天".format(days), "%.1f days".format(days), lang)
+                                }
+                                Column {
+                                    Text(freqText, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                                    Text(s("平均间隔", "Avg Interval", lang), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
         item {
             Text(
-                text = s("积分日志", "Point Logs", lang),
+                text = if (activeTracker != null) s("相关日志", "Related Logs", lang)
+                       else s("积分日志", "Point Logs", lang),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -902,6 +1376,161 @@ private fun OverviewPage(
             }
         )
     }
+
+    if (showAddTrackerDialog) {
+        AddTrackerDialog(
+            earnItems = earnItems,
+            rewardItems = rewardItems,
+            lang = lang,
+            onDismiss = { showAddTrackerDialog = false },
+            onConfirm = { name, sources ->
+                onAddTracker(name, sources)
+                showAddTrackerDialog = false
+            }
+        )
+    }
+
+    if (pendingDeleteTracker != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDeleteTracker = null },
+            title = { Text(s("删除统计项", "Delete Tracker", lang)) },
+            text = { Text(s("确定删除「${pendingDeleteTracker!!.name}」吗？", "Delete \"${pendingDeleteTracker!!.name}\"?", lang)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val tracker = pendingDeleteTracker ?: return@TextButton
+                    onDeleteTracker(tracker.id)
+                    pendingDeleteTracker = null
+                    selectedTrackerId = null
+                    selectedType = "ALL"
+                }) {
+                    Text(s("删除", "Delete", lang), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteTracker = null }) {
+                    Text(s("取消", "Cancel", lang))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun AddTrackerDialog(
+    earnItems: List<ScoreItem>,
+    rewardItems: List<ScoreItem>,
+    lang: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String, List<String>) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    val allItems = earnItems + rewardItems
+    val selectedNames = remember { mutableStateOf(setOf<String>()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(s("新增统计项", "Add Tracker", lang)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(s("名称", "Name", lang)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    s("选择要统计的事务/奖励：", "Select tasks/rewards to track:", lang),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                    if (earnItems.isNotEmpty()) {
+                        item {
+                            Text(
+                                s("事务", "Tasks", lang),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+                    }
+                    items(earnItems) { item ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedNames.value = if (item.name in selectedNames.value)
+                                        selectedNames.value - item.name
+                                    else selectedNames.value + item.name
+                                }
+                                .padding(vertical = 2.dp)
+                        ) {
+                            Checkbox(
+                                checked = item.name in selectedNames.value,
+                                onCheckedChange = {
+                                    selectedNames.value = if (it) selectedNames.value + item.name
+                                    else selectedNames.value - item.name
+                                }
+                            )
+                            Text(item.name)
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text("+${item.points}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    if (rewardItems.isNotEmpty()) {
+                        item {
+                            Text(
+                                s("奖励", "Rewards", lang),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+                    }
+                    items(rewardItems) { item ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedNames.value = if (item.name in selectedNames.value)
+                                        selectedNames.value - item.name
+                                    else selectedNames.value + item.name
+                                }
+                                .padding(vertical = 2.dp)
+                        ) {
+                            Checkbox(
+                                checked = item.name in selectedNames.value,
+                                onCheckedChange = {
+                                    selectedNames.value = if (it) selectedNames.value + item.name
+                                    else selectedNames.value - item.name
+                                }
+                            )
+                            Text(item.name)
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text("-${item.points}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name.trim(), selectedNames.value.toList()) },
+                enabled = name.isNotBlank() && selectedNames.value.isNotEmpty()
+            ) {
+                Text(s("确认", "Confirm", lang))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(s("取消", "Cancel", lang))
+            }
+        }
+    )
 }
 
 @Composable

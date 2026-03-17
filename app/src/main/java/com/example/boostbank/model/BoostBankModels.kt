@@ -26,7 +26,9 @@ data class ScoreItem(
     val imageUri: String?,
     val imageBiasX: Float = 0f,
     val imageBiasY: Float = 0f,
-    val imageScale: Float = 1f
+    val imageScale: Float = 1f,
+    val isMilestone: Boolean = false,
+    val completedAt: Long? = null
 )
 
 data class ScoreLog(
@@ -36,6 +38,13 @@ data class ScoreLog(
     val note: String,
     val type: LogType,
     val afterScore: Int,
+    val createdAt: Long
+)
+
+data class StatTracker(
+    val id: Long,
+    val name: String,
+    val trackedSources: List<String>,
     val createdAt: Long
 )
 
