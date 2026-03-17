@@ -100,6 +100,8 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.unit.IntOffset
 
 private val LogTimeFormatter: DateTimeFormatter =
@@ -717,6 +719,20 @@ private fun EarnTabContainer(
     onPickImage: () -> Unit,
     editorImageUri: String?
 ) {
+    val pagerState = rememberPagerState(initialPage = earnTab) { 2 }
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(earnTab) {
+        if (pagerState.currentPage != earnTab) pagerState.animateScrollToPage(earnTab)
+    }
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage != earnTab) onEarnTabChange(pagerState.currentPage)
+    }
+
+    if (earnTab == 1) {
+        BackHandler { onEarnTabChange(0) }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -726,43 +742,45 @@ private fun EarnTabContainer(
         ) {
             FilterChip(
                 selected = earnTab == 0,
-                onClick = { onEarnTabChange(0) },
+                onClick = { coroutineScope.launch { pagerState.animateScrollToPage(0) } },
                 label = { Text(s("日常事务", "Daily Tasks", lang)) }
             )
             FilterChip(
                 selected = earnTab == 1,
-                onClick = { onEarnTabChange(1) },
+                onClick = { coroutineScope.launch { pagerState.animateScrollToPage(1) } },
                 label = { Text(s("里程碑", "Milestones", lang)) }
             )
         }
-        when (earnTab) {
-            0 -> EarnPage(
-                items = earnItems,
-                totalScore = totalScore,
-                confirmBeforeEarn = confirmBeforeEarn,
-                cardImageOpacity = cardImageOpacity,
-                nightMode = nightMode,
-                lang = lang,
-                onAddRequest = onAddTask,
-                onEditRequest = onEditTask,
-                onDeleteRequest = onDeleteTask,
-                onCompleteItem = onCompleteTask
-            )
-            1 -> {
-                BackHandler { onEarnTabChange(0) }
-                MilestonePage(
-                milestones = milestones,
-                totalScore = totalScore,
-                cardImageOpacity = cardImageOpacity,
-                nightMode = nightMode,
-                lang = lang,
-                onEditRequest = onEditMilestone,
-                onDeleteRequest = onDeleteMilestone,
-                onCompleteMilestone = onCompleteMilestone,
-                onAddMilestone = onAddMilestone,
-                onPickImage = onPickImage,
-                editorImageUri = editorImageUri
-            )
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            when (page) {
+                0 -> EarnPage(
+                    items = earnItems,
+                    totalScore = totalScore,
+                    confirmBeforeEarn = confirmBeforeEarn,
+                    cardImageOpacity = cardImageOpacity,
+                    nightMode = nightMode,
+                    lang = lang,
+                    onAddRequest = onAddTask,
+                    onEditRequest = onEditTask,
+                    onDeleteRequest = onDeleteTask,
+                    onCompleteItem = onCompleteTask
+                )
+                1 -> MilestonePage(
+                    milestones = milestones,
+                    totalScore = totalScore,
+                    cardImageOpacity = cardImageOpacity,
+                    nightMode = nightMode,
+                    lang = lang,
+                    onEditRequest = onEditMilestone,
+                    onDeleteRequest = onDeleteMilestone,
+                    onCompleteMilestone = onCompleteMilestone,
+                    onAddMilestone = onAddMilestone,
+                    onPickImage = onPickImage,
+                    editorImageUri = editorImageUri
+                )
             }
         }
     }
