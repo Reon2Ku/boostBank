@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -61,6 +63,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
@@ -68,6 +73,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -481,7 +487,7 @@ fun BoostBankApp() {
 }
 
 // ---------------------------------------------------------------------------
-// Avatar Crop Dialog — gesture-based pan/zoom with circular preview
+// Avatar Crop Dialog — full image view with circle overlay mask
 // ---------------------------------------------------------------------------
 @Composable
 private fun AvatarCropDialog(
@@ -493,36 +499,68 @@ private fun AvatarCropDialog(
     onConfirm: (biasX: Float, biasY: Float, scale: Float) -> Unit,
     onDismiss: () -> Unit
 ) {
+    // zoom=1 means the image fills the container via ContentScale.Crop
+    // User sees the full image first and drags/zooms to position the circle
+    var zoom by remember { mutableStateOf(initialScale.coerceAtLeast(1f)) }
     var offsetX by remember { mutableStateOf(0f) }
     var offsetY by remember { mutableStateOf(0f) }
-    var zoom by remember { mutableStateOf(initialScale.coerceAtLeast(1f)) }
+    var containerSizePx by remember { mutableStateOf(0) }
+    var initialized by remember { mutableStateOf(false) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(s("裁剪头像", "Crop Avatar", lang)) },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    // Restore previous crop position once container is measured
+    LaunchedEffect(containerSizePx) {
+        if (containerSizePx > 0 && !initialized) {
+            initialized = true
+            val halfC = containerSizePx / 2f
+            val maxOff = halfC * (zoom - 1f)
+            offsetX = -initialBiasX * maxOff
+            offsetY = -initialBiasY * maxOff
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Text(
-                    s("拖动和双指缩放来调整头像", "Drag and pinch to adjust", lang),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    s("裁剪头像", "Crop Avatar", lang),
+                    style = MaterialTheme.typography.titleLarge
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    s("拖动和缩放图片以调整头像区域",
+                        "Drag & pinch the image to adjust", lang),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(Modifier.height(12.dp))
+
+                // Image area — square container with circle mask
                 Box(
                     modifier = Modifier
-                        .size(240.dp)
-                        .clip(CircleShape)
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
                         .clipToBounds()
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .background(Color.Black)
+                        .onSizeChanged { containerSizePx = it.width }
                         .pointerInput(Unit) {
                             detectTransformGestures { _, pan, gestureZoom, _ ->
                                 zoom = (zoom * gestureZoom).coerceIn(1f, 5f)
-                                val maxOffset = (zoom - 1f) * 120f
-                                offsetX = (offsetX + pan.x).coerceIn(-maxOffset, maxOffset)
-                                offsetY = (offsetY + pan.y).coerceIn(-maxOffset, maxOffset)
+                                val halfContainer = size.width / 2f
+                                val maxOff = halfContainer * (zoom - 1f)
+                                offsetX = (offsetX + pan.x).coerceIn(-maxOff, maxOff)
+                                offsetY = (offsetY + pan.y).coerceIn(-maxOff, maxOff)
                             }
                         },
                     contentAlignment = Alignment.Center
                 ) {
+                    // The full image — draggable and zoomable
                     AsyncImage(
                         model = imageUri,
                         contentDescription = null,
@@ -534,27 +572,62 @@ private fun AvatarCropDialog(
                                 translationX = offsetX
                                 translationY = offsetY
                             },
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Fit
                     )
+
+                    // Dark overlay with transparent circle cutout
+                    val circleRadiusFraction = 0.42f // circle fills ~84% of container
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    ) {
+                        val cx = size.width / 2f
+                        val cy = size.height / 2f
+                        val r = size.minDimension * circleRadiusFraction
+
+                        // Draw semi-transparent dark overlay
+                        drawRect(Color.Black.copy(alpha = 0.55f))
+                        // Punch out the circle
+                        drawCircle(
+                            color = Color.Transparent,
+                            radius = r,
+                            center = Offset(cx, cy),
+                            blendMode = BlendMode.Clear
+                        )
+                        // Circle border
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.8f),
+                            radius = r,
+                            center = Offset(cx, cy),
+                            style = Stroke(width = 2.dp.toPx())
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(s("取消", "Cancel", lang))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = {
+                        val halfC = containerSizePx / 2f
+                        val maxOff = (halfC * (zoom - 1f)).coerceAtLeast(0.001f)
+                        val biasX = (-offsetX / maxOff).coerceIn(-1f, 1f)
+                        val biasY = (-offsetY / maxOff).coerceIn(-1f, 1f)
+                        onConfirm(biasX, biasY, zoom)
+                    }) {
+                        Text(s("确定", "Confirm", lang))
+                    }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val maxOffset = (zoom - 1f) * 120f
-                val biasX = if (maxOffset > 0f) (-offsetX / maxOffset).coerceIn(-1f, 1f) else 0f
-                val biasY = if (maxOffset > 0f) (-offsetY / maxOffset).coerceIn(-1f, 1f) else 0f
-                onConfirm(biasX, biasY, zoom)
-            }) {
-                Text(s("确定", "Confirm", lang))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(s("取消", "Cancel", lang))
-            }
         }
-    )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -894,6 +967,7 @@ private fun MePage(
                     Text(s("头像", "Avatar", lang), fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(16.dp))
                     if (settings.avatarUri != null) {
+                        val avatarZoom = settings.avatarScale.coerceAtLeast(1f)
                         Box(
                             modifier = Modifier
                                 .size(96.dp)
@@ -905,9 +979,15 @@ private fun MePage(
                                 contentDescription = s("头像", "Avatar", lang),
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .scale(settings.avatarScale.coerceAtLeast(1f)),
-                                contentScale = ContentScale.Crop,
-                                alignment = BiasAlignment(settings.avatarBiasX, settings.avatarBiasY)
+                                    .graphicsLayer {
+                                        scaleX = avatarZoom
+                                        scaleY = avatarZoom
+                                        val halfC = size.width / 2f
+                                        val maxOff = halfC * (avatarZoom - 1f)
+                                        translationX = -settings.avatarBiasX * maxOff
+                                        translationY = -settings.avatarBiasY * maxOff
+                                    },
+                                contentScale = ContentScale.Fit
                             )
                         }
                     } else {
