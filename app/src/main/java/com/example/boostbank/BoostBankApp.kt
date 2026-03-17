@@ -262,6 +262,7 @@ fun BoostBankApp() {
                     totalScore = totalScore,
                     confirmBeforeReward = settings.confirmBeforeReward,
                     cardImageOpacity = settings.cardImageOpacity,
+                    lang = settings.language,
                     onAddRequest = {
                         itemEditorState = ItemEditorState(ItemCategory.REWARD)
                         itemEditorImageUri = null
@@ -287,6 +288,7 @@ fun BoostBankApp() {
                 MainPage.OVERVIEW -> OverviewPage(
                     totalScore = totalScore,
                     logs = scoreLogs,
+                    lang = settings.language,
                     onAdjustScore = { newScore ->
                         coroutineScope.launch {
                             repository.adjustTotalScore(newScore)
@@ -361,6 +363,7 @@ fun BoostBankApp() {
         ItemEditorDialog(
             state = editorState,
             imageUri = itemEditorImageUri,
+            lang = settings.language,
             onDismiss = {
                 itemEditorState = null
                 itemEditorImageUri = null
@@ -421,8 +424,9 @@ fun BoostBankApp() {
     if (pendingDeleteItem != null) {
         AlertDialog(
             onDismissRequest = { pendingDeleteItem = null },
-            title = { Text("删除确认") },
-            text = { Text("确定删除 ${pendingDeleteItem!!.name} 吗？已生成的积分日志不会被删除。") },
+            title = { Text(s("删除确认", "Delete Confirmation", settings.language)) },
+            text = { Text(s("确定删除 ${pendingDeleteItem!!.name} 吗？已生成的积分日志不会被删除。",
+                "Delete ${pendingDeleteItem!!.name}? Existing logs will not be removed.", settings.language)) },
             confirmButton = {
                 TextButton(onClick = {
                     val deletingItem = pendingDeleteItem ?: return@TextButton
@@ -431,12 +435,12 @@ fun BoostBankApp() {
                         pendingDeleteItem = null
                     }
                 }) {
-                    Text("删除")
+                    Text(s("删除", "Delete", settings.language))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDeleteItem = null }) {
-                    Text("取消")
+                    Text(s("取消", "Cancel", settings.language))
                 }
             }
         )
@@ -445,11 +449,11 @@ fun BoostBankApp() {
     if (infoMessage != null) {
         AlertDialog(
             onDismissRequest = { infoMessage = null },
-            title = { Text("提示") },
+            title = { Text(s("提示", "Notice", settings.language)) },
             text = { Text(infoMessage!!) },
             confirmButton = {
                 TextButton(onClick = { infoMessage = null }) {
-                    Text("知道了")
+                    Text(s("知道了", "OK", settings.language))
                 }
             }
         )
@@ -607,6 +611,7 @@ private fun EarnPage(
                 actionLabel = s("完成一次 +${item.points}", "Complete +${item.points}", lang),
                 accentColor = Color(0xFFD9F99D),
                 cardImageOpacity = cardImageOpacity,
+                lang = lang,
                 compact = true,
                 onPrimaryClick = {
                     if (confirmBeforeEarn) {
@@ -656,6 +661,7 @@ private fun RewardPage(
     totalScore: Int,
     confirmBeforeReward: Boolean,
     cardImageOpacity: Float,
+    lang: String,
     onAddRequest: () -> Unit,
     onEditRequest: (ScoreItem) -> Unit,
     onDeleteRequest: (ScoreItem) -> Unit,
@@ -673,9 +679,10 @@ private fun RewardPage(
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             PageHeader(
-                title = "购买奖励",
-                subtitle = "允许透支积分（可为负数），当前总积分：$totalScore",
-                actionText = "新增奖励",
+                title = s("购买奖励", "Buy Rewards", lang),
+                subtitle = s("允许透支积分（可为负数），当前总积分：$totalScore",
+                    "Overdraft allowed (can go negative). Current total: $totalScore", lang),
+                actionText = s("新增奖励", "Add Reward", lang),
                 onActionClick = onAddRequest
             )
         }
@@ -683,9 +690,10 @@ private fun RewardPage(
         gridItems(items, key = { it.id }) { item ->
             ScoreItemCard(
                 item = item,
-                actionLabel = "兑换奖励 -${item.points}",
+                actionLabel = s("兑换奖励 -${item.points}", "Redeem -${item.points}", lang),
                 accentColor = Color(0xFFFECACA),
                 cardImageOpacity = cardImageOpacity,
+                lang = lang,
                 compact = true,
                 onPrimaryClick = {
                     if (confirmBeforeReward) {
@@ -703,20 +711,21 @@ private fun RewardPage(
     if (pendingReward != null) {
         AlertDialog(
             onDismissRequest = { pendingReward = null },
-            title = { Text("确认兑换") },
-            text = { Text("确定花费 ${pendingReward!!.points} 积分兑换 ${pendingReward!!.name} 吗？") },
+            title = { Text(s("确认兑换", "Confirm Redemption", lang)) },
+            text = { Text(s("确定花费 ${pendingReward!!.points} 积分兑换 ${pendingReward!!.name} 吗？",
+                "Spend ${pendingReward!!.points} points to redeem ${pendingReward!!.name}?", lang)) },
             confirmButton = {
                 TextButton(onClick = {
                     val reward = pendingReward ?: return@TextButton
                     onRedeemItem(reward)
                     pendingReward = null
                 }) {
-                    Text("确认")
+                    Text(s("确认", "Confirm", lang))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingReward = null }) {
-                    Text("取消")
+                    Text(s("取消", "Cancel", lang))
                 }
             }
         )
@@ -727,16 +736,17 @@ private fun RewardPage(
 private fun OverviewPage(
     totalScore: Int,
     logs: List<ScoreLog>,
+    lang: String,
     onAdjustScore: (Int) -> Unit
 ) {
     var showAdjustDialog by remember { mutableStateOf(false) }
-    var selectedType by rememberSaveable { mutableStateOf("全部") }
+    var selectedType by rememberSaveable { mutableStateOf("ALL") }
 
     val filteredLogs = logs.filter {
         when (selectedType) {
-            "获取" -> it.type == LogType.EARN
-            "消耗" -> it.type == LogType.SPEND
-            "校准" -> it.type == LogType.ADJUST
+            "EARN" -> it.type == LogType.EARN
+            "SPEND" -> it.type == LogType.SPEND
+            "ADJUST" -> it.type == LogType.ADJUST
             else -> true
         }
     }
@@ -749,9 +759,10 @@ private fun OverviewPage(
     ) {
         item {
             PageHeader(
-                title = "分数概览",
-                subtitle = "总分、手动校准和积分日志都集中在这里。",
-                actionText = "手动校准",
+                title = s("分数概览", "Score Overview", lang),
+                subtitle = s("总分、手动校准和积分日志都集中在这里。",
+                    "Total score, manual adjustments and point logs are all here.", lang),
+                actionText = s("手动校准", "Adjust", lang),
                 onActionClick = { showAdjustDialog = true }
             )
         }
@@ -759,7 +770,7 @@ private fun OverviewPage(
         item {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Text("当前总积分", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(s("当前总积分", "Current Total Score", lang), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = totalScore.toString(),
@@ -772,11 +783,16 @@ private fun OverviewPage(
 
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("全部", "获取", "消耗", "校准").forEach { type ->
+                listOf(
+                    "ALL" to s("全部", "All", lang),
+                    "EARN" to s("获取", "Earn", lang),
+                    "SPEND" to s("消耗", "Spend", lang),
+                    "ADJUST" to s("校准", "Adjust", lang)
+                ).forEach { (key, label) ->
                     FilterChip(
-                        selected = selectedType == type,
-                        onClick = { selectedType = type },
-                        label = { Text(type) }
+                        selected = selectedType == key,
+                        onClick = { selectedType = key },
+                        label = { Text(label) }
                     )
                 }
             }
@@ -784,20 +800,21 @@ private fun OverviewPage(
 
         item {
             Text(
-                text = "积分日志",
+                text = s("积分日志", "Point Logs", lang),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
         }
 
         items(filteredLogs, key = { it.id }) { log ->
-            LogCard(log = log)
+            LogCard(log = log, lang = lang)
         }
     }
 
     if (showAdjustDialog) {
         AdjustScoreDialog(
             currentScore = totalScore,
+            lang = lang,
             onDismiss = { showAdjustDialog = false },
             onConfirm = {
                 onAdjustScore(it)
@@ -1159,6 +1176,7 @@ private fun ScoreItemCard(
     actionLabel: String,
     accentColor: Color,
     cardImageOpacity: Float = 0.70f,
+    lang: String = "简体中文",
     compact: Boolean = false,
     onPrimaryClick: () -> Unit,
     onEditClick: () -> Unit,
@@ -1200,7 +1218,7 @@ private fun ScoreItemCard(
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(if (compact) 4.dp else 6.dp))
-                Text("积分值：${item.points}")
+                Text(s("积分值：${item.points}", "Points: ${item.points}", lang))
                 Spacer(modifier = Modifier.height(if (compact) 6.dp else 10.dp))
                 Text(
                     actionLabel,
@@ -1211,10 +1229,10 @@ private fun ScoreItemCard(
                 Spacer(modifier = Modifier.height(if (compact) 8.dp else 14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = onEditClick) {
-                        Text("编辑")
+                        Text(s("编辑", "Edit", lang))
                     }
                     TextButton(onClick = onDeleteClick) {
-                        Text("删除")
+                        Text(s("删除", "Delete", lang))
                     }
                 }
             }
@@ -1223,7 +1241,7 @@ private fun ScoreItemCard(
 }
 
 @Composable
-private fun LogCard(log: ScoreLog) {
+private fun LogCard(log: ScoreLog, lang: String = "简体中文") {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -1245,7 +1263,7 @@ private fun LogCard(log: ScoreLog) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(log.note, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(6.dp))
-            Text("操作后总积分：${log.afterScore}")
+            Text(s("操作后总积分：${log.afterScore}", "Score after: ${log.afterScore}", lang))
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = LogTimeFormatter.format(Instant.ofEpochMilli(log.createdAt)),
@@ -1302,6 +1320,7 @@ private fun SettingRow(
 private fun ItemEditorDialog(
     state: ItemEditorState,
     imageUri: String?,
+    lang: String = "简体中文",
     imageBiasX: Float,
     imageBiasY: Float,
     imageScale: Float,
@@ -1326,9 +1345,9 @@ private fun ItemEditorDialog(
         title = {
             Text(
                 if (isEditing) {
-                    if (state.category == ItemCategory.EARN) "编辑赚分事务" else "编辑奖励"
+                    if (state.category == ItemCategory.EARN) s("编辑赚分事务", "Edit Earn Task", lang) else s("编辑奖励", "Edit Reward", lang)
                 } else {
-                    if (state.category == ItemCategory.EARN) "新增赚分事务" else "新增奖励"
+                    if (state.category == ItemCategory.EARN) s("新增赚分事务", "Add Earn Task", lang) else s("新增奖励", "Add Reward", lang)
                 }
             )
         },
@@ -1337,13 +1356,13 @@ private fun ItemEditorDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("名称") },
+                    label = { Text(s("名称", "Name", lang)) },
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = pointsText,
                     onValueChange = { pointsText = it.filter(Char::isDigit) },
-                    label = { Text("积分") },
+                    label = { Text(s("积分", "Points", lang)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
@@ -1365,20 +1384,20 @@ private fun ItemEditorDialog(
                             alignment = BiasAlignment(imageBiasX, imageBiasY)
                         )
                     }
-                    Text("调整截取区域（拖动滑块）")
-                    Text("缩放")
+                    Text(s("调整截取区域（拖动滑块）", "Adjust crop area (drag sliders)", lang))
+                    Text(s("缩放", "Scale", lang))
                     Slider(
                         value = imageScale,
                         onValueChange = onImageScaleChange,
                         valueRange = 1f..3f
                     )
-                    Text("水平位置")
+                    Text(s("水平位置", "Horizontal position", lang))
                     Slider(
                         value = imageBiasX,
                         onValueChange = onImageBiasXChange,
                         valueRange = -1f..1f
                     )
-                    Text("垂直位置")
+                    Text(s("垂直位置", "Vertical position", lang))
                     Slider(
                         value = imageBiasY,
                         onValueChange = onImageBiasYChange,
@@ -1387,10 +1406,11 @@ private fun ItemEditorDialog(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onPickImage) {
-                        Text(if (imageUri == null) "选择背景图片" else "更换背景图片")
+                        Text(s(if (imageUri == null) "选择背景图片" else "更换背景图片",
+                            if (imageUri == null) "Choose Image" else "Change Image", lang))
                     }
                     OutlinedButton(onClick = onClearImage, enabled = imageUri != null) {
-                        Text("清除图片")
+                        Text(s("清除图片", "Clear Image", lang))
                     }
                 }
             }
@@ -1400,12 +1420,12 @@ private fun ItemEditorDialog(
                 onClick = { onConfirm(name.trim(), points!!, imageBiasX, imageBiasY, imageScale) },
                 enabled = canConfirm
             ) {
-                Text(if (isEditing) "保存" else "添加")
+                Text(s(if (isEditing) "保存" else "添加", if (isEditing) "Save" else "Add", lang))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(s("取消", "Cancel", lang))
             }
         }
     )
@@ -1414,6 +1434,7 @@ private fun ItemEditorDialog(
 @Composable
 private fun AdjustScoreDialog(
     currentScore: Int,
+    lang: String = "简体中文",
     onDismiss: () -> Unit,
     onConfirm: (Int) -> Unit
 ) {
@@ -1422,14 +1443,14 @@ private fun AdjustScoreDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("手动校准积分") },
+        title = { Text(s("手动校准积分", "Adjust Score", lang)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("当前总积分：$currentScore")
+                Text(s("当前总积分：$currentScore", "Current total: $currentScore", lang))
                 OutlinedTextField(
                     value = scoreText,
                     onValueChange = { scoreText = sanitizeSignedIntInput(it) },
-                    label = { Text("新的总积分") },
+                    label = { Text(s("新的总积分", "New total score", lang)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
                 )
@@ -1440,12 +1461,12 @@ private fun AdjustScoreDialog(
                 onClick = { onConfirm(newScore!!) },
                 enabled = newScore != null
             ) {
-                Text("保存")
+                Text(s("保存", "Save", lang))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(s("取消", "Cancel", lang))
             }
         }
     )
