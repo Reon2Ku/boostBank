@@ -169,6 +169,10 @@ class BoostBankRepository(context: Context) {
         settingsStore.setBackgroundMaskOpacity(opacity)
     }
 
+    suspend fun setCardImageOpacity(opacity: Float) {
+        settingsStore.setCardImageOpacity(opacity)
+    }
+
     suspend fun setPageBackground(page: MainPage, uri: String?) {
         settingsStore.setPageBackground(page, uri)
     }

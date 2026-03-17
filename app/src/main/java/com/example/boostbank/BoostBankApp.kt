@@ -233,6 +233,7 @@ fun BoostBankApp() {
                     items = earnItems,
                     totalScore = totalScore,
                     confirmBeforeEarn = settings.confirmBeforeEarn,
+                    cardImageOpacity = settings.cardImageOpacity,
                     lang = settings.language,
                     onAddRequest = {
                         itemEditorState = ItemEditorState(ItemCategory.EARN)
@@ -260,6 +261,7 @@ fun BoostBankApp() {
                     items = rewardItems,
                     totalScore = totalScore,
                     confirmBeforeReward = settings.confirmBeforeReward,
+                    cardImageOpacity = settings.cardImageOpacity,
                     onAddRequest = {
                         itemEditorState = ItemEditorState(ItemCategory.REWARD)
                         itemEditorImageUri = null
@@ -323,6 +325,11 @@ fun BoostBankApp() {
                     onBackgroundMaskOpacityChanged = { opacity ->
                         coroutineScope.launch {
                             repository.setBackgroundMaskOpacity(opacity)
+                        }
+                    },
+                    onCardImageOpacityChanged = { opacity ->
+                        coroutineScope.launch {
+                            repository.setCardImageOpacity(opacity)
                         }
                     },
                     onPickAvatar = {
@@ -567,6 +574,7 @@ private fun EarnPage(
     items: List<ScoreItem>,
     totalScore: Int,
     confirmBeforeEarn: Boolean,
+    cardImageOpacity: Float,
     lang: String,
     onAddRequest: () -> Unit,
     onEditRequest: (ScoreItem) -> Unit,
@@ -598,6 +606,7 @@ private fun EarnPage(
                 item = item,
                 actionLabel = s("完成一次 +${item.points}", "Complete +${item.points}", lang),
                 accentColor = Color(0xFFD9F99D),
+                cardImageOpacity = cardImageOpacity,
                 compact = true,
                 onPrimaryClick = {
                     if (confirmBeforeEarn) {
@@ -646,6 +655,7 @@ private fun RewardPage(
     items: List<ScoreItem>,
     totalScore: Int,
     confirmBeforeReward: Boolean,
+    cardImageOpacity: Float,
     onAddRequest: () -> Unit,
     onEditRequest: (ScoreItem) -> Unit,
     onDeleteRequest: (ScoreItem) -> Unit,
@@ -675,6 +685,7 @@ private fun RewardPage(
                 item = item,
                 actionLabel = "兑换奖励 -${item.points}",
                 accentColor = Color(0xFFFECACA),
+                cardImageOpacity = cardImageOpacity,
                 compact = true,
                 onPrimaryClick = {
                     if (confirmBeforeReward) {
@@ -806,6 +817,7 @@ private fun MePage(
     onNightModeChanged: (Boolean) -> Unit,
     onWarmBackgroundChanged: (Boolean) -> Unit,
     onBackgroundMaskOpacityChanged: (Float) -> Unit,
+    onCardImageOpacityChanged: (Float) -> Unit,
     onPickAvatar: () -> Unit,
     onCropAvatar: () -> Unit,
     onPickPageBackground: (MainPage) -> Unit,
@@ -821,6 +833,7 @@ private fun MePage(
             onBack = { showBackgroundSettings = false },
             onWarmBackgroundChanged = onWarmBackgroundChanged,
             onBackgroundMaskOpacityChanged = onBackgroundMaskOpacityChanged,
+            onCardImageOpacityChanged = onCardImageOpacityChanged,
             onPickPageBackground = onPickPageBackground,
             onClearPageBackground = onClearPageBackground
         )
@@ -1034,6 +1047,7 @@ private fun BackgroundSettingsPage(
     onBack: () -> Unit,
     onWarmBackgroundChanged: (Boolean) -> Unit,
     onBackgroundMaskOpacityChanged: (Float) -> Unit,
+    onCardImageOpacityChanged: (Float) -> Unit,
     onPickPageBackground: (MainPage) -> Unit,
     onClearPageBackground: (MainPage) -> Unit
 ) {
@@ -1071,6 +1085,16 @@ private fun BackgroundSettingsPage(
                         value = settings.backgroundMaskOpacity,
                         onValueChange = onBackgroundMaskOpacityChanged,
                         valueRange = 0.1f..1f
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                    Text(
+                        s("卡片图片遮罩透明度：${(settings.cardImageOpacity * 100).roundToInt()}%",
+                            "Card image mask opacity: ${(settings.cardImageOpacity * 100).roundToInt()}%", lang)
+                    )
+                    Slider(
+                        value = settings.cardImageOpacity,
+                        onValueChange = onCardImageOpacityChanged,
+                        valueRange = 0f..1f
                     )
                 }
             }
@@ -1134,6 +1158,7 @@ private fun ScoreItemCard(
     item: ScoreItem,
     actionLabel: String,
     accentColor: Color,
+    cardImageOpacity: Float = 0.70f,
     compact: Boolean = false,
     onPrimaryClick: () -> Unit,
     onEditClick: () -> Unit,
@@ -1165,7 +1190,7 @@ private fun ScoreItemCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(0xB3FFFFFF))
+                        .background(Color.White.copy(alpha = cardImageOpacity))
                 )
             }
             Column(modifier = Modifier.padding(if (compact) 12.dp else 18.dp)) {

@@ -33,6 +33,7 @@ class SettingsStore(private val context: Context) {
                 confirmBeforeEarn = preferences[CONFIRM_BEFORE_EARN] ?: true,
                 useWarmBackground = preferences[USE_WARM_BACKGROUND] ?: false,
                 backgroundMaskOpacity = preferences[BACKGROUND_MASK_OPACITY] ?: 0.92f,
+                cardImageOpacity = preferences[CARD_IMAGE_OPACITY] ?: 0.70f,
                 nightMode = preferences[NIGHT_MODE] ?: false,
                 avatarUri = preferences[AVATAR_URI],
                 avatarBiasX = preferences[AVATAR_BIAS_X] ?: 0f,
@@ -79,6 +80,10 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[BACKGROUND_MASK_OPACITY] = opacity.coerceIn(0.1f, 1f) }
     }
 
+    suspend fun setCardImageOpacity(opacity: Float) {
+        context.dataStore.edit { it[CARD_IMAGE_OPACITY] = opacity.coerceIn(0f, 1f) }
+    }
+
     suspend fun setNightMode(enabled: Boolean) {
         context.dataStore.edit { it[NIGHT_MODE] = enabled }
     }
@@ -109,6 +114,7 @@ class SettingsStore(private val context: Context) {
         private val CONFIRM_BEFORE_EARN = booleanPreferencesKey("confirm_before_earn")
         private val USE_WARM_BACKGROUND = booleanPreferencesKey("use_warm_background")
         private val BACKGROUND_MASK_OPACITY = floatPreferencesKey("background_mask_opacity")
+        private val CARD_IMAGE_OPACITY = floatPreferencesKey("card_image_opacity")
         private val NIGHT_MODE = booleanPreferencesKey("night_mode")
         private val AVATAR_URI = stringPreferencesKey("avatar_uri")
         private val AVATAR_BIAS_X = floatPreferencesKey("avatar_bias_x")

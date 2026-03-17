@@ -45,6 +45,7 @@ data class AppSettings(
     val confirmBeforeEarn: Boolean = true,
     val useWarmBackground: Boolean = false,
     val backgroundMaskOpacity: Float = 0.92f,
+    val cardImageOpacity: Float = 0.70f,
     val nightMode: Boolean = false,
     val avatarUri: String? = null,
     val avatarBiasX: Float = 0f,
