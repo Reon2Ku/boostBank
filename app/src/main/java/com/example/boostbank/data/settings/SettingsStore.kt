@@ -35,6 +35,9 @@ class SettingsStore(private val context: Context) {
                 backgroundMaskOpacity = preferences[BACKGROUND_MASK_OPACITY] ?: 0.92f,
                 nightMode = preferences[NIGHT_MODE] ?: false,
                 avatarUri = preferences[AVATAR_URI],
+                avatarBiasX = preferences[AVATAR_BIAS_X] ?: 0f,
+                avatarBiasY = preferences[AVATAR_BIAS_Y] ?: 0f,
+                avatarScale = preferences[AVATAR_SCALE] ?: 1f,
                 earnBackgroundUri = preferences[EARN_BACKGROUND_URI],
                 rewardBackgroundUri = preferences[REWARD_BACKGROUND_URI],
                 overviewBackgroundUri = preferences[OVERVIEW_BACKGROUND_URI],
@@ -53,6 +56,14 @@ class SettingsStore(private val context: Context) {
     suspend fun setAvatarUri(uri: String?) {
         context.dataStore.edit { preferences ->
             if (uri.isNullOrBlank()) preferences.remove(AVATAR_URI) else preferences[AVATAR_URI] = uri
+        }
+    }
+
+    suspend fun setAvatarCrop(biasX: Float, biasY: Float, scale: Float) {
+        context.dataStore.edit { preferences ->
+            preferences[AVATAR_BIAS_X] = biasX
+            preferences[AVATAR_BIAS_Y] = biasY
+            preferences[AVATAR_SCALE] = scale
         }
     }
 
@@ -100,6 +111,9 @@ class SettingsStore(private val context: Context) {
         private val BACKGROUND_MASK_OPACITY = floatPreferencesKey("background_mask_opacity")
         private val NIGHT_MODE = booleanPreferencesKey("night_mode")
         private val AVATAR_URI = stringPreferencesKey("avatar_uri")
+        private val AVATAR_BIAS_X = floatPreferencesKey("avatar_bias_x")
+        private val AVATAR_BIAS_Y = floatPreferencesKey("avatar_bias_y")
+        private val AVATAR_SCALE = floatPreferencesKey("avatar_scale")
         private val EARN_BACKGROUND_URI = stringPreferencesKey("earn_background_uri")
         private val REWARD_BACKGROUND_URI = stringPreferencesKey("reward_background_uri")
         private val OVERVIEW_BACKGROUND_URI = stringPreferencesKey("overview_background_uri")

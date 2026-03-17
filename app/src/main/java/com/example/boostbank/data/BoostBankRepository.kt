@@ -177,6 +177,10 @@ class BoostBankRepository(context: Context) {
         settingsStore.setAvatarUri(uri)
     }
 
+    suspend fun setAvatarCrop(biasX: Float, biasY: Float, scale: Float) {
+        settingsStore.setAvatarCrop(biasX, biasY, scale)
+    }
+
     suspend fun setConfirmBeforeEarn(enabled: Boolean) {
         settingsStore.setConfirmBeforeEarn(enabled)
     }

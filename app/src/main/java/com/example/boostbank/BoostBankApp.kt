@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,12 +57,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -79,6 +88,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+
+import androidx.compose.ui.unit.IntOffset
 
 private val LogTimeFormatter: DateTimeFormatter =
     DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(ZoneId.systemDefault())
@@ -115,6 +126,7 @@ fun BoostBankApp() {
     var pendingDeleteItem by remember { mutableStateOf<ScoreItem?>(null) }
     var imagePickerTarget by remember { mutableStateOf<ImagePickerTarget?>(null) }
     var infoMessage by remember { mutableStateOf<String?>(null) }
+    var avatarCropUri by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(repository) {
         repository.seedDefaultsIfNeeded()
@@ -144,9 +156,7 @@ fun BoostBankApp() {
                 itemEditorImageScale = 1f
             }
             ImagePickerTarget.Avatar -> {
-                coroutineScope.launch {
-                    repository.setAvatarUri(uri.toString())
-                }
+                avatarCropUri = uri.toString()
             }
             is ImagePickerTarget.PageBackground -> {
                 coroutineScope.launch {
@@ -319,6 +329,12 @@ fun BoostBankApp() {
                         imagePickerTarget = ImagePickerTarget.Avatar
                         openDocumentLauncher.launch(arrayOf("image/*"))
                     },
+                    onCropAvatar = {
+                        val uri = settings.avatarUri
+                        if (uri != null) {
+                            avatarCropUri = uri
+                        }
+                    },
                     onPickPageBackground = { page ->
                         imagePickerTarget = ImagePickerTarget.PageBackground(page)
                         openDocumentLauncher.launch(arrayOf("image/*"))
@@ -431,7 +447,103 @@ fun BoostBankApp() {
             }
         )
     }
+
+    if (avatarCropUri != null) {
+        AvatarCropDialog(
+            imageUri = avatarCropUri!!,
+            initialBiasX = settings.avatarBiasX,
+            initialBiasY = settings.avatarBiasY,
+            initialScale = settings.avatarScale,
+            lang = settings.language,
+            onConfirm = { biasX, biasY, scale ->
+                val uri = avatarCropUri!!
+                avatarCropUri = null
+                coroutineScope.launch {
+                    repository.setAvatarUri(uri)
+                    repository.setAvatarCrop(biasX, biasY, scale)
+                }
+            },
+            onDismiss = { avatarCropUri = null }
+        )
+    }
     } // BoostBankTheme
+}
+
+// ---------------------------------------------------------------------------
+// Avatar Crop Dialog — gesture-based pan/zoom with circular preview
+// ---------------------------------------------------------------------------
+@Composable
+private fun AvatarCropDialog(
+    imageUri: String,
+    initialBiasX: Float,
+    initialBiasY: Float,
+    initialScale: Float,
+    lang: String,
+    onConfirm: (biasX: Float, biasY: Float, scale: Float) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var offsetX by remember { mutableStateOf(0f) }
+    var offsetY by remember { mutableStateOf(0f) }
+    var zoom by remember { mutableStateOf(initialScale.coerceAtLeast(1f)) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(s("裁剪头像", "Crop Avatar", lang)) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    s("拖动和双指缩放来调整头像", "Drag and pinch to adjust", lang),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier
+                        .size(240.dp)
+                        .clip(CircleShape)
+                        .clipToBounds()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, pan, gestureZoom, _ ->
+                                zoom = (zoom * gestureZoom).coerceIn(1f, 5f)
+                                val maxOffset = (zoom - 1f) * 120f
+                                offsetX = (offsetX + pan.x).coerceIn(-maxOffset, maxOffset)
+                                offsetY = (offsetY + pan.y).coerceIn(-maxOffset, maxOffset)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = imageUri,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = zoom
+                                scaleY = zoom
+                                translationX = offsetX
+                                translationY = offsetY
+                            },
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val maxOffset = (zoom - 1f) * 120f
+                val biasX = if (maxOffset > 0f) (-offsetX / maxOffset).coerceIn(-1f, 1f) else 0f
+                val biasY = if (maxOffset > 0f) (-offsetY / maxOffset).coerceIn(-1f, 1f) else 0f
+                onConfirm(biasX, biasY, zoom)
+            }) {
+                Text(s("确定", "Confirm", lang))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(s("取消", "Cancel", lang))
+            }
+        }
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -695,6 +807,7 @@ private fun MePage(
     onWarmBackgroundChanged: (Boolean) -> Unit,
     onBackgroundMaskOpacityChanged: (Float) -> Unit,
     onPickAvatar: () -> Unit,
+    onCropAvatar: () -> Unit,
     onPickPageBackground: (MainPage) -> Unit,
     onClearPageBackground: (MainPage) -> Unit
 ) {
@@ -751,14 +864,22 @@ private fun MePage(
                     Text(s("头像", "Avatar", lang), fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(16.dp))
                     if (settings.avatarUri != null) {
-                        AsyncImage(
-                            model = settings.avatarUri,
-                            contentDescription = s("头像", "Avatar", lang),
+                        Box(
                             modifier = Modifier
                                 .size(96.dp)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
+                                .clip(CircleShape)
+                                .clipToBounds()
+                        ) {
+                            AsyncImage(
+                                model = settings.avatarUri,
+                                contentDescription = s("头像", "Avatar", lang),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .scale(settings.avatarScale.coerceAtLeast(1f)),
+                                contentScale = ContentScale.Crop,
+                                alignment = BiasAlignment(settings.avatarBiasX, settings.avatarBiasY)
+                            )
+                        }
                     } else {
                         Box(
                             modifier = Modifier
@@ -775,8 +896,15 @@ private fun MePage(
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedButton(onClick = onPickAvatar) {
-                        Text(s("选择头像", "Choose Avatar", lang))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onPickAvatar) {
+                            Text(s("选择头像", "Choose Avatar", lang))
+                        }
+                        if (settings.avatarUri != null) {
+                            OutlinedButton(onClick = onCropAvatar) {
+                                Text(s("裁剪", "Crop", lang))
+                            }
+                        }
                     }
                 }
             }
