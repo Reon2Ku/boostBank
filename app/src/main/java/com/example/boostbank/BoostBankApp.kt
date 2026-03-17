@@ -131,6 +131,7 @@ fun BoostBankApp() {
     val settings by repository.settings.collectAsState(initial = AppSettings())
 
     var currentPage by rememberSaveable { mutableStateOf(MainPage.EARN) }
+    var earnTab by rememberSaveable { mutableStateOf(0) }
     var itemEditorState by remember { mutableStateOf<ItemEditorState?>(null) }
     var itemEditorImageUri by remember { mutableStateOf<String?>(null) }
     var itemEditorImageBiasX by remember { mutableStateOf(0f) }
@@ -243,6 +244,8 @@ fun BoostBankApp() {
             )
             when (currentPage) {
                 MainPage.EARN -> EarnTabContainer(
+                    earnTab = earnTab,
+                    onEarnTabChange = { earnTab = it },
                     earnItems = earnItems,
                     milestones = milestones,
                     totalScore = totalScore,
@@ -694,6 +697,8 @@ private fun sanitizeSignedIntInput(input: String): String {
 
 @Composable
 private fun EarnTabContainer(
+    earnTab: Int,
+    onEarnTabChange: (Int) -> Unit,
     earnItems: List<ScoreItem>,
     milestones: List<ScoreItem>,
     totalScore: Int,
@@ -712,8 +717,6 @@ private fun EarnTabContainer(
     onPickImage: () -> Unit,
     editorImageUri: String?
 ) {
-    var earnTab by rememberSaveable { mutableStateOf(0) } // 0=daily, 1=milestone
-
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -723,12 +726,12 @@ private fun EarnTabContainer(
         ) {
             FilterChip(
                 selected = earnTab == 0,
-                onClick = { earnTab = 0 },
+                onClick = { onEarnTabChange(0) },
                 label = { Text(s("日常事务", "Daily Tasks", lang)) }
             )
             FilterChip(
                 selected = earnTab == 1,
-                onClick = { earnTab = 1 },
+                onClick = { onEarnTabChange(1) },
                 label = { Text(s("里程碑", "Milestones", lang)) }
             )
         }
@@ -745,7 +748,9 @@ private fun EarnTabContainer(
                 onDeleteRequest = onDeleteTask,
                 onCompleteItem = onCompleteTask
             )
-            1 -> MilestonePage(
+            1 -> {
+                BackHandler { onEarnTabChange(0) }
+                MilestonePage(
                 milestones = milestones,
                 totalScore = totalScore,
                 cardImageOpacity = cardImageOpacity,
@@ -758,6 +763,7 @@ private fun EarnTabContainer(
                 onPickImage = onPickImage,
                 editorImageUri = editorImageUri
             )
+            }
         }
     }
 }
@@ -1551,6 +1557,7 @@ private fun MePage(
 ) {
     var showBackgroundSettings by rememberSaveable { mutableStateOf(false) }
     var showGeneralSettings by rememberSaveable { mutableStateOf(false) }
+    var showUserGuide by rememberSaveable { mutableStateOf(false) }
 
     if (showBackgroundSettings) {
         BackHandler { showBackgroundSettings = false }
@@ -1577,6 +1584,12 @@ private fun MePage(
             onConfirmBeforeEarnChanged = onConfirmBeforeEarnChanged,
             onConfirmBeforeRewardChanged = onConfirmBeforeRewardChanged
         )
+        return
+    }
+
+    if (showUserGuide) {
+        BackHandler { showUserGuide = false }
+        UserGuidePage(lang = lang, onBack = { showUserGuide = false })
         return
     }
 
@@ -1702,6 +1715,155 @@ private fun MePage(
                     Button(onClick = { showBackgroundSettings = true }) {
                         Text(s("背景设置", "Background Settings", lang))
                     }
+                }
+            }
+        }
+
+        // User Guide entry
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("用户指南", "User Guide", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        s("了解应用功能与使用方法。", "Learn about app features and how to use them.", lang),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(onClick = { showUserGuide = true }) {
+                        Text(s("用户指南", "User Guide", lang))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserGuidePage(lang: String, onBack: () -> Unit) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            PageHeader(
+                title = s("用户指南", "User Guide", lang),
+                subtitle = s("BoostBank 功能说明与使用方法。", "Features and usage of BoostBank.", lang),
+                actionText = s("返回", "Back", lang),
+                onActionClick = onBack
+            )
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("📌 基本介绍", "📌 Overview", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(s(
+                        "BoostBank 是一款个人积分激励工具。通过完成事务获得积分，用积分兑换奖励，帮助你养成良好习惯。\n\n应用底部有 4 个导航页面：赚（赚取积分）、奖（购买奖励）、览（分数概览）、我（个人设置）。",
+                        "BoostBank is a personal gamification tool. Earn points by completing tasks, spend points on rewards, and build good habits.\n\nThe app has 4 tabs: Earn, Rewards, Overview, and Me.",
+                        lang
+                    ), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("⭐ 赚取积分 — 日常事务", "⭐ Earn — Daily Tasks", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(s(
+                        "• 点击「新增事务」创建任务，设置名称、积分值和背景图片\n• 点击卡片即可完成一次任务并获得积分，可反复完成\n• 常用事务会自动排到前面\n• 可在「通用设置」中开启确认弹窗防止误触",
+                        "• Tap 'Add Task' to create a task with name, points, and background image\n• Tap a card to complete it and earn points (repeatable)\n• Frequently used tasks float to the top\n• Enable confirmation dialogs in General Settings to prevent accidental taps",
+                        lang
+                    ), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("🏆 赚取积分 — 里程碑", "🏆 Earn — Milestones", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(s(
+                        "• 切换到「里程碑」标签页查看\n• 用于记录重大目标，每个里程碑只能完成一次\n• 完成后标记为「✓ 已完成」并移至页面底部\n• 可随时往下翻阅回顾已完成的里程碑",
+                        "• Switch to the 'Milestones' tab to view\n• Track major goals — each milestone can only be completed once\n• Completed milestones are marked '✓ Done' and move to the bottom\n• Scroll down to review your completed milestones",
+                        lang
+                    ), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("🎁 购买奖励", "🎁 Rewards", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(s(
+                        "• 点击「新增奖励」创建奖励项目\n• 点击卡片消耗积分兑换奖励\n• 允许透支（积分可为负数）\n• 操作方式与日常事务一致",
+                        "• Tap 'Add Reward' to create a reward\n• Tap a card to spend points and redeem it\n• Overdraft is allowed (score can go negative)\n• Works the same as daily tasks",
+                        lang
+                    ), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("📊 分数概览", "📊 Score Overview", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(s(
+                        "• 顶部显示当前总积分\n• 按类型筛选日志：全部 / 获取 / 消耗 / 校准\n• 「手动校准」可直接修改总积分（支持负数）\n• 所有操作均有时间戳记录",
+                        "• Shows your current total score at the top\n• Filter logs by type: All / Earn / Spend / Adjust\n• Use 'Adjust' to manually set the total (supports negative)\n• All actions are timestamped",
+                        lang
+                    ), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("📈 自定义统计项", "📈 Custom Trackers", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(s(
+                        "• 在分数概览页面，点击筛选栏末尾的「+」按钮\n• 输入名称并勾选要追踪的事务或奖励\n• 创建后以标签形式出现，点击可查看统计数据\n• 包括总次数、最近一次时间、平均间隔\n• 可删除不再需要的统计项",
+                        "• On the Overview page, tap the '+' button at the end of the filter row\n• Enter a name and select tasks/rewards to track\n• Created trackers appear as filter chips\n• View total count, last time, and average interval\n• Delete trackers you no longer need",
+                        lang
+                    ), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("⚙️ 设置与个性化", "⚙️ Settings & Customization", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(s(
+                        "• 夜间模式：在「我的」页面直接开关\n• 通用设置：语言切换、确认弹窗开关\n• 背景设置：每个页面可单独设置背景图片\n• 可调节背景遮罩和卡片图片透明度\n• 头像：选择图片后拖拽缩放调整显示区域\n• 所有设置保存在本地，重启 App 后仍然生效",
+                        "• Night Mode: toggle directly on the Me page\n• General Settings: language switch, confirmation dialogs\n• Background Settings: set per-page background images\n• Adjust background mask and card image opacity\n• Avatar: pick an image, drag & pinch to crop\n• All settings are saved locally and persist after restart",
+                        lang
+                    ), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(s("💡 小提示", "💡 Tips", lang), fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(s(
+                        "• 卡片背景图片支持拖拽和双指缩放调整位置\n• 调整积分时可附加原因备注\n• 系统返回键/手势可从子页面返回上级页面",
+                        "• Card background images support drag & pinch to adjust\n• Add a reason note when adjusting score\n• System back button/gesture navigates back from subpages",
+                        lang
+                    ), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
