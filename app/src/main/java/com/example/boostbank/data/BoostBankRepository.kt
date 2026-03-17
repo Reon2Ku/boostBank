@@ -136,16 +136,17 @@ class BoostBankRepository(context: Context) {
         }
     }
 
-    suspend fun adjustTotalScore(newScore: Int) {
+    suspend fun adjustTotalScore(newScore: Int, reason: String = "") {
         database.withTransaction {
             val account = dao.getAccount() ?: ScoreAccountEntity(totalScore = 0)
             val delta = newScore - account.totalScore
+            val note = if (reason.isNotBlank()) reason else "校准总积分"
             dao.upsertAccount(account.copy(totalScore = newScore, updatedAt = System.currentTimeMillis()))
             dao.insertLog(
                 ScoreLogEntity(
                     source = "手动调整",
                     delta = delta,
-                    note = "校准总积分",
+                    note = note,
                     type = LogType.ADJUST.name,
                     afterScore = newScore
                 )

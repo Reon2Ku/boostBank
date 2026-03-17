@@ -295,9 +295,9 @@ fun BoostBankApp() {
                     totalScore = totalScore,
                     logs = scoreLogs,
                     lang = settings.language,
-                    onAdjustScore = { newScore ->
+                    onAdjustScore = { newScore, reason ->
                         coroutineScope.launch {
-                            repository.adjustTotalScore(newScore)
+                            repository.adjustTotalScore(newScore, reason)
                         }
                     }
                 )
@@ -810,7 +810,7 @@ private fun OverviewPage(
     totalScore: Int,
     logs: List<ScoreLog>,
     lang: String,
-    onAdjustScore: (Int) -> Unit
+    onAdjustScore: (Int, String) -> Unit
 ) {
     var showAdjustDialog by remember { mutableStateOf(false) }
     var selectedType by rememberSaveable { mutableStateOf("ALL") }
@@ -889,8 +889,8 @@ private fun OverviewPage(
             currentScore = totalScore,
             lang = lang,
             onDismiss = { showAdjustDialog = false },
-            onConfirm = {
-                onAdjustScore(it)
+            onConfirm = { score, reason ->
+                onAdjustScore(score, reason)
                 showAdjustDialog = false
             }
         )
@@ -1571,9 +1571,10 @@ private fun AdjustScoreDialog(
     currentScore: Int,
     lang: String = "简体中文",
     onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit
+    onConfirm: (Int, String) -> Unit
 ) {
     var scoreText by remember { mutableStateOf(currentScore.toString()) }
+    var reason by remember { mutableStateOf("") }
     val newScore = scoreText.toIntOrNull()
 
     AlertDialog(
@@ -1589,11 +1590,17 @@ private fun AdjustScoreDialog(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
                 )
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    label = { Text(s("调整原因（可选）", "Reason (optional)", lang)) },
+                    singleLine = true
+                )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(newScore!!) },
+                onClick = { onConfirm(newScore!!, reason.trim()) },
                 enabled = newScore != null
             ) {
                 Text(s("保存", "Save", lang))
