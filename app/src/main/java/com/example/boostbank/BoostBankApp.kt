@@ -241,6 +241,7 @@ fun BoostBankApp() {
                     totalScore = totalScore,
                     confirmBeforeEarn = settings.confirmBeforeEarn,
                     cardImageOpacity = settings.cardImageOpacity,
+                    nightMode = settings.nightMode,
                     lang = settings.language,
                     onAddRequest = {
                         itemEditorState = ItemEditorState(ItemCategory.EARN)
@@ -269,6 +270,7 @@ fun BoostBankApp() {
                     totalScore = totalScore,
                     confirmBeforeReward = settings.confirmBeforeReward,
                     cardImageOpacity = settings.cardImageOpacity,
+                    nightMode = settings.nightMode,
                     lang = settings.language,
                     onAddRequest = {
                         itemEditorState = ItemEditorState(ItemCategory.REWARD)
@@ -653,6 +655,7 @@ private fun EarnPage(
     totalScore: Int,
     confirmBeforeEarn: Boolean,
     cardImageOpacity: Float,
+    nightMode: Boolean = false,
     lang: String,
     onAddRequest: () -> Unit,
     onEditRequest: (ScoreItem) -> Unit,
@@ -685,6 +688,7 @@ private fun EarnPage(
                 actionLabel = s("完成一次 +${item.points}", "Complete +${item.points}", lang),
                 accentColor = Color(0xFFD9F99D),
                 cardImageOpacity = cardImageOpacity,
+                nightMode = nightMode,
                 lang = lang,
                 compact = true,
                 onPrimaryClick = {
@@ -735,6 +739,7 @@ private fun RewardPage(
     totalScore: Int,
     confirmBeforeReward: Boolean,
     cardImageOpacity: Float,
+    nightMode: Boolean = false,
     lang: String,
     onAddRequest: () -> Unit,
     onEditRequest: (ScoreItem) -> Unit,
@@ -767,6 +772,7 @@ private fun RewardPage(
                 actionLabel = s("兑换奖励 -${item.points}", "Redeem -${item.points}", lang),
                 accentColor = Color(0xFFFECACA),
                 cardImageOpacity = cardImageOpacity,
+                nightMode = nightMode,
                 lang = lang,
                 compact = true,
                 onPrimaryClick = {
@@ -1259,6 +1265,7 @@ private fun ScoreItemCard(
     actionLabel: String,
     accentColor: Color,
     cardImageOpacity: Float = 0.70f,
+    nightMode: Boolean = false,
     lang: String = "简体中文",
     compact: Boolean = false,
     onPrimaryClick: () -> Unit,
@@ -1269,7 +1276,9 @@ private fun ScoreItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(3f / 4f),
-        colors = CardDefaults.cardColors(containerColor = accentColor.copy(alpha = 0.45f)),
+        colors = CardDefaults.cardColors(
+            containerColor = if (nightMode) accentColor.copy(alpha = 0.12f) else accentColor.copy(alpha = 0.45f)
+        ),
         shape = RoundedCornerShape(if (compact) 16.dp else 24.dp)
     ) {
         Box(
@@ -1298,7 +1307,10 @@ private fun ScoreItemCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.White.copy(alpha = cardImageOpacity))
+                        .background(
+                            if (nightMode) Color(0xFF1A1A2E).copy(alpha = cardImageOpacity)
+                            else Color.White.copy(alpha = cardImageOpacity)
+                        )
                 )
             }
             Column(modifier = Modifier.padding(if (compact) 12.dp else 18.dp)) {
