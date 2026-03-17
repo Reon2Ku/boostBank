@@ -946,8 +946,7 @@ private fun MePage(
             onBack = { showGeneralSettings = false },
             onLanguageSelected = onLanguageSelected,
             onConfirmBeforeEarnChanged = onConfirmBeforeEarnChanged,
-            onConfirmBeforeRewardChanged = onConfirmBeforeRewardChanged,
-            onNightModeChanged = onNightModeChanged
+            onConfirmBeforeRewardChanged = onConfirmBeforeRewardChanged
         )
         return
     }
@@ -1029,6 +1028,19 @@ private fun MePage(
             }
         }
 
+        // Night Mode toggle
+        item {
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    SettingRow(
+                        title = s("夜间模式", "Night Mode", lang),
+                        value = settings.nightMode,
+                        onValueChange = onNightModeChanged
+                    )
+                }
+            }
+        }
+
         // General Settings entry
         item {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
@@ -1074,8 +1086,7 @@ private fun GeneralSettingsPage(
     onBack: () -> Unit,
     onLanguageSelected: (String) -> Unit,
     onConfirmBeforeEarnChanged: (Boolean) -> Unit,
-    onConfirmBeforeRewardChanged: (Boolean) -> Unit,
-    onNightModeChanged: (Boolean) -> Unit
+    onConfirmBeforeRewardChanged: (Boolean) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -1130,19 +1141,6 @@ private fun GeneralSettingsPage(
             }
         }
 
-        item {
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(s("夜间模式", "Night Mode", lang), fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(14.dp))
-                    SettingRow(
-                        title = s("启用夜间模式", "Enable night mode", lang),
-                        value = settings.nightMode,
-                        onValueChange = onNightModeChanged
-                    )
-                }
-            }
-        }
     }
 }
 
