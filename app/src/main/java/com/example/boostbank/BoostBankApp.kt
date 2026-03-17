@@ -1265,25 +1265,32 @@ private fun ScoreItemCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (compact) Modifier.heightIn(min = 220.dp) else Modifier),
+            .height(if (compact) 220.dp else 260.dp),
         colors = CardDefaults.cardColors(containerColor = accentColor.copy(alpha = 0.45f)),
         shape = RoundedCornerShape(if (compact) 16.dp else 24.dp)
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .clipToBounds()
                 .clickable(onClick = onPrimaryClick)
         ) {
             if (item.imageUri != null) {
+                val imgScale = item.imageScale.coerceAtLeast(1f)
                 AsyncImage(
                     model = item.imageUri,
                     contentDescription = null,
                     modifier = Modifier
                         .fillMaxSize()
-                        .scale(item.imageScale),
-                    contentScale = ContentScale.Crop,
-                    alignment = BiasAlignment(item.imageBiasX, item.imageBiasY)
+                        .graphicsLayer {
+                            scaleX = imgScale
+                            scaleY = imgScale
+                            val halfW = size.width / 2f
+                            val halfH = size.height / 2f
+                            translationX = -item.imageBiasX * halfW * (imgScale - 1f)
+                            translationY = -item.imageBiasY * halfH * (imgScale - 1f)
+                        },
+                    contentScale = ContentScale.Crop
                 )
                 Box(
                     modifier = Modifier
@@ -1420,69 +1427,91 @@ private fun ItemEditorDialog(
     val canConfirm = name.isNotBlank() && points != null && points > 0
     val isEditing = state.item != null
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                if (isEditing) {
-                    if (state.category == ItemCategory.EARN) s("编辑赚分事务", "Edit Earn Task", lang) else s("编辑奖励", "Edit Reward", lang)
-                } else {
-                    if (state.category == ItemCategory.EARN) s("新增赚分事务", "Add Earn Task", lang) else s("新增奖励", "Add Reward", lang)
-                }
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    if (isEditing) {
+                        if (state.category == ItemCategory.EARN) s("编辑赚分事务", "Edit Earn Task", lang) else s("编辑奖励", "Edit Reward", lang)
+                    } else {
+                        if (state.category == ItemCategory.EARN) s("新增赚分事务", "Add Earn Task", lang) else s("新增奖励", "Add Reward", lang)
+                    },
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text(s("名称", "Name", lang)) },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = pointsText,
                     onValueChange = { pointsText = it.filter(Char::isDigit) },
                     label = { Text(s("积分", "Points", lang)) },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(Modifier.height(8.dp))
                 if (imageUri != null) {
+                    Text(
+                        s("拖动和缩放图片以调整位置", "Drag & pinch to adjust position", lang),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(Modifier.height(4.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(140.dp)
+                            .height(180.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .clipToBounds()
+                            .background(Color.Black)
+                            .pointerInput(Unit) {
+                                detectTransformGestures { _, pan, gestureZoom, _ ->
+                                    val newScale = (imageScale * gestureZoom).coerceIn(1f, 5f)
+                                    onImageScaleChange(newScale)
+                                    val halfW = size.width / 2f
+                                    val halfH = size.height / 2f
+                                    val maxOffX = halfW * (newScale - 1f)
+                                    val maxOffY = halfH * (newScale - 1f)
+                                    val curOffX = -imageBiasX * maxOffX
+                                    val curOffY = -imageBiasY * maxOffY
+                                    val newOffX = (curOffX + pan.x).coerceIn(-maxOffX, maxOffX)
+                                    val newOffY = (curOffY + pan.y).coerceIn(-maxOffY, maxOffY)
+                                    val newBiasX = if (maxOffX > 0f) (-newOffX / maxOffX).coerceIn(-1f, 1f) else 0f
+                                    val newBiasY = if (maxOffY > 0f) (-newOffY / maxOffY).coerceIn(-1f, 1f) else 0f
+                                    onImageBiasXChange(newBiasX)
+                                    onImageBiasYChange(newBiasY)
+                                }
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
+                        val previewScale = imageScale.coerceAtLeast(1f)
                         AsyncImage(
                             model = imageUri,
                             contentDescription = null,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .scale(imageScale),
-                            contentScale = ContentScale.Crop,
-                            alignment = BiasAlignment(imageBiasX, imageBiasY)
+                                .graphicsLayer {
+                                    scaleX = previewScale
+                                    scaleY = previewScale
+                                    val halfW = size.width / 2f
+                                    val halfH = size.height / 2f
+                                    translationX = -imageBiasX * halfW * (previewScale - 1f)
+                                    translationY = -imageBiasY * halfH * (previewScale - 1f)
+                                },
+                            contentScale = ContentScale.Crop
                         )
                     }
-                    Text(s("调整截取区域（拖动滑块）", "Adjust crop area (drag sliders)", lang))
-                    Text(s("缩放", "Scale", lang))
-                    Slider(
-                        value = imageScale,
-                        onValueChange = onImageScaleChange,
-                        valueRange = 1f..3f
-                    )
-                    Text(s("水平位置", "Horizontal position", lang))
-                    Slider(
-                        value = imageBiasX,
-                        onValueChange = onImageBiasXChange,
-                        valueRange = -1f..1f
-                    )
-                    Text(s("垂直位置", "Vertical position", lang))
-                    Slider(
-                        value = imageBiasY,
-                        onValueChange = onImageBiasYChange,
-                        valueRange = -1f..1f
-                    )
+                    Spacer(Modifier.height(8.dp))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onPickImage) {
@@ -1493,22 +1522,25 @@ private fun ItemEditorDialog(
                         Text(s("清除图片", "Clear Image", lang))
                     }
                 }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(name.trim(), points!!, imageBiasX, imageBiasY, imageScale) },
-                enabled = canConfirm
-            ) {
-                Text(s(if (isEditing) "保存" else "添加", if (isEditing) "Save" else "Add", lang))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(s("取消", "Cancel", lang))
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(s("取消", "Cancel", lang))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        onClick = { onConfirm(name.trim(), points!!, imageBiasX, imageBiasY, imageScale) },
+                        enabled = canConfirm
+                    ) {
+                        Text(s(if (isEditing) "保存" else "添加", if (isEditing) "Save" else "Add", lang))
+                    }
+                }
             }
         }
-    )
+    }
 }
 
 @Composable
