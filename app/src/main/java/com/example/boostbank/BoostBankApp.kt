@@ -1,6 +1,7 @@
 package com.example.boostbank
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -917,6 +918,7 @@ private fun MePage(
     var showGeneralSettings by rememberSaveable { mutableStateOf(false) }
 
     if (showBackgroundSettings) {
+        BackHandler { showBackgroundSettings = false }
         BackgroundSettingsPage(
             settings = settings,
             lang = lang,
@@ -931,6 +933,7 @@ private fun MePage(
     }
 
     if (showGeneralSettings) {
+        BackHandler { showGeneralSettings = false }
         GeneralSettingsPage(
             settings = settings,
             lang = lang,
