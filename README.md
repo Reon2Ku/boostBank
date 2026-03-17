@@ -1,5 +1,7 @@
 # BoostBank — 个人积分激励工具
 
+> **[⬇ 点击下载最新 APK](release/boostBank.apk?raw=true)**
+
 BoostBank 是一款面向个人使用的安卓应用，用于记录「完成事务获得积分」与「消耗积分兑换奖励」，帮助用户建立可持续的自我激励机制。
 
 ## APK 位置
