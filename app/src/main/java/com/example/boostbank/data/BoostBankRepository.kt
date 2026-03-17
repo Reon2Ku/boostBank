@@ -105,6 +105,7 @@ class BoostBankRepository(context: Context) {
             val account = dao.getAccount() ?: ScoreAccountEntity(totalScore = 0)
             val newTotal = account.totalScore + item.points
             dao.upsertAccount(account.copy(totalScore = newTotal, updatedAt = System.currentTimeMillis()))
+            dao.updateItem(item.copy(updatedAt = System.currentTimeMillis()))
             dao.insertLog(
                 ScoreLogEntity(
                     source = item.name,
@@ -123,6 +124,7 @@ class BoostBankRepository(context: Context) {
             val account = dao.getAccount() ?: ScoreAccountEntity(totalScore = 0)
             val newTotal = account.totalScore - item.points
             dao.upsertAccount(account.copy(totalScore = newTotal, updatedAt = System.currentTimeMillis()))
+            dao.updateItem(item.copy(updatedAt = System.currentTimeMillis()))
             dao.insertLog(
                 ScoreLogEntity(
                     source = item.name,
